@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LabCheck</title>
+<meta name="description" content="Notes and code for a checker that finds mistakes in liquid-handling protocols before the robot runs them.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#fbfaf6;--ink:#1d1c1a;--mute:#6c6a63;--rule:#d9d6cc;--link:#1f3a8a;--fail:#a3361c;--pass:#2f6b3f;--warn:#9a6a10;
+--buf:#3b6ea5;--sam:#d08b2f;--dye:#b0305a;--serif:'Source Serif 4',Georgia,serif;--mono:'IBM Plex Mono',ui-monospace,monospace}
+@media(prefers-color-scheme:dark){:root{--paper:#171715;--ink:#e8e6df;--mute:#9a978d;--rule:#34332f;--link:#8fa8f0;--fail:#ee7a5f;--pass:#78c08b;--warn:#d9a441;--buf:#6ea0d8;--sam:#e0a04a;--dye:#d9618a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:400 18px/1.7 var(--serif)}
+a{color:var(--link)}:focus-visible{outline:2px solid var(--link);outline-offset:2px}
+.col{max-width:41rem;margin:0 auto;padding:0 22px}.wide{max-width:60rem;margin:0 auto;padding:0 22px}
+header{border-bottom:1px solid var(--rule)}
+nav{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;padding:18px 0}
+nav .brand{font:600 20px var(--serif);background:none;border:0;color:var(--ink);cursor:pointer;padding:0}
+nav .links button{font:400 15px var(--serif);background:none;border:0;color:var(--mute);cursor:pointer;margin-left:20px;padding:0;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:5px}
+nav .links button:hover{color:var(--ink)}nav .links button[aria-current]{color:var(--ink);text-decoration-color:var(--ink)}
+h1{font:600 clamp(34px,5vw,46px)/1.15 var(--serif);margin:48px 0 10px;letter-spacing:-.01em}
+h2{font:600 24px/1.3 var(--serif);margin:44px 0 6px}
+p{margin:0 0 1em}.sub{font-size:21px;color:var(--mute);line-height:1.5;margin-bottom:1.2em}
+section[data-p]{display:none;padding-bottom:80px}section[data-p].on{display:block}
+.b{font:500 13px var(--mono);padding:6px 12px;border:1px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer;border-radius:2px}
+.b:hover{background:var(--ink);color:var(--paper)}.b[aria-pressed=true]{background:var(--ink);color:var(--paper)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.sp{flex:1}
+figure{margin:36px 0 0}figcaption{font-size:15px;color:var(--mute);margin-top:10px;max-width:41rem}
+.fig{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:28px;margin-top:14px;padding-top:14px;border-top:1px solid var(--rule)}
+svg{width:100%;height:auto;display:block}
+.well{fill:none;stroke:#9a978d;stroke-width:1.2}.ctrl{fill:none;stroke:var(--warn);stroke-width:1.3;stroke-dasharray:2 3}
+#hi{fill:none;stroke:var(--ink);stroke-width:2}.axis{fill:var(--mute);font:10.5px var(--mono);text-anchor:middle}
+.pulse{animation:p 1s ease-in-out infinite}@keyframes p{50%{opacity:.2}}
+.mono{font:13px var(--mono)}.lbl{font:12px var(--mono);color:var(--mute);text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px}
+.g{margin-bottom:10px}.g .t{display:flex;justify-content:space-between;font:12.5px var(--mono);color:var(--mute)}
+.g .tr{height:3px;background:var(--rule);margin-top:4px}.g .tr i{display:block;height:100%;transition:width .5s}
+ol#log{list-style:none;margin:0;padding:0;max-height:250px;overflow:auto;font:12.5px/1.5 var(--mono)}
+#log li{padding:6px 0;border-top:1px solid var(--rule)}#log li.bad{color:var(--fail)}#log small{display:block;font-size:12px}
+.verdict{font:500 14px var(--mono);margin-top:10px;min-height:22px}
+.key{display:flex;gap:14px;flex-wrap:wrap;font:12px var(--mono);color:var(--mute);margin-top:6px}.key i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+.side{font-size:14.5px;line-height:1.5;color:var(--mute);border-left:2px solid var(--rule);padding-left:12px;margin:0 0 1.2em}
+@media(min-width:1180px){.side{float:right;width:13.5rem;margin:.2em -16.5rem 1em 0;clear:right}}
+table{border-collapse:collapse;width:100%;font:13.5px/1.5 var(--mono);margin:14px 0}
+.tw{overflow-x:auto}table{min-width:480px}
+th{font-weight:500;color:var(--mute);text-align:left;padding:6px 14px 6px 0;border-top:1px solid var(--ink);border-bottom:1px solid var(--ink)}
+td{padding:7px 14px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}tr:last-child td{border-bottom:1px solid var(--ink)}
+code{font:500 .86em var(--mono)}code.k{color:var(--fail)}
+.bad{color:var(--fail)}.ok{color:var(--pass)}
+textarea{width:100%;min-height:340px;font:13px/1.55 var(--mono);padding:12px;border:1px solid var(--ink);border-radius:2px;color:var(--ink);background:transparent;resize:vertical}
+pre{border-left:2px solid var(--rule);padding:4px 0 4px 16px;overflow-x:auto;font:13px/1.6 var(--mono);margin:1em 0}
+ul.plain,ol.plain{padding-left:1.3em;margin:0 0 1em}ul.plain li,ol.plain li{margin-bottom:.5em}
+.hit{cursor:pointer}.hit:hover,.hit:focus-visible{stroke:var(--ink);stroke-width:1.5;outline:none}dt{font-weight:600;margin-top:1.1em}dd{margin:0;color:var(--ink)}dl{margin:0}.x{font:13px var(--mono);background:none;border:0;color:var(--mute);cursor:pointer;padding:0 4px}.x:hover{color:var(--fail)}.todo{color:var(--warn)}.line{border-top:1px solid var(--rule);margin:40px 0 0}
+input[type=number]{width:76px;font:13px var(--mono);padding:5px 8px;border:1px solid var(--ink);background:transparent;color:var(--ink);border-radius:2px}
+.meter{height:3px;min-width:120px;background:var(--rule)}.meter i{display:block;height:100%;background:var(--ink)}
+footer{border-top:1px solid var(--rule);padding:22px 0 40px;color:var(--mute);font-size:14.5px}
+@media(max-width:860px){.fig,.two{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.pulse{animation:none}.g .tr i{transition:none}}
+
+.fig.scope{border-top:0;margin-top:14px}
+.scope{--ink:#edf3ef;--paper:#0e1a18;--mute:#8ea79f;--rule:#2a4540;--fail:#ff7a63;--pass:#6fe0a0;--warn:#ffb454;background:#0e1a18;color:var(--ink);padding:22px;border-radius:4px}
+.scope .well{fill:rgba(255,255,255,.03);stroke:#3a5750}
+.liq{transform-box:fill-box;transform-origin:center;transition:transform .55s cubic-bezier(.3,1.35,.5,1),fill .5s}
+#head{transition:transform .55s cubic-bezier(.5,0,.2,1)}
+.rip{transform-box:fill-box;transform-origin:center;animation:rip .9s ease-out forwards}@keyframes rip{from{transform:scale(1);opacity:.9}to{transform:scale(3.4);opacity:0}}
+.drop{transform-box:fill-box;transform-origin:center;animation:dropf .34s ease-in forwards}@keyframes dropf{from{transform:translateY(-30px)}to{transform:translateY(0);opacity:.1}}
+.pop-fail{animation:shake .5s}@keyframes shake{20%,60%{transform:translateX(-5px)}40%,80%{transform:translateX(5px)}}
+.pop-pass{animation:fade .6s}@keyframes fade{from{opacity:0}}
+.wide>p,.wide>h2,.wide>.row{max-width:41rem}
+.num{text-align:right}th.num{text-align:right}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:26px 30px;margin-top:14px}.charts figure{margin:0}.charts figcaption{font-size:14.5px;margin-top:4px}.charts svg{display:block;width:100%;height:auto}
+.charts figure.full{grid-column:1/-1}
+.c-ax{stroke:var(--ink);stroke-width:1;fill:none}.c-grid{stroke:var(--rule);stroke-width:1}.c-t{fill:var(--mute);font:10.5px var(--mono)}.c-l{font:11px var(--mono);fill:var(--mute)}
+select{font:13px var(--mono);padding:5px 8px;border:1px solid var(--ink);background:transparent;color:var(--ink);border-radius:2px}
+.hist{display:flex;align-items:flex-end;gap:4px;height:110px;margin:14px 0 4px;border-bottom:1px solid var(--ink)}.hist div{flex:1;background:var(--ink);min-height:1px;position:relative}
+.hist div span{position:absolute;bottom:-20px;left:0;right:0;text-align:center;font:11px var(--mono);color:var(--mute)}
+.axisrow{height:22px}
+.mx td{text-align:right}.mx td:first-child{text-align:left}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style></head><body>
+<header><div class="wide"><nav><button class="brand" data-go="home">LabCheck</button>
+<div class="links" id="nav"><button data-go="home">Notes</button><button data-go="build">Build</button><button data-go="validate">Try it</button><button data-go="data">Data</button><button data-go="analysis">Analysis</button><button data-go="method">Method</button><button data-go="results">Results</button><button data-go="report">Report</button><button data-go="glossary">Glossary</button></div></nav></div></header>
+
+<section data-p="home">
+<div class="col">
+<h1>LabCheck</h1>
+<p class="sub">A checker for liquid-handling protocols.</p>
+<p>A liquid handler does what the protocol says. If the protocol asks a 20–300 µL pipette for 15 µL, or takes 60 µL from a tube with 40 in it, the robot just goes ahead. Usually you notice when the plate looks wrong.</p>
+<p>LabCheck runs the protocol in software before the robot does. It keeps count of the liquid in every tube and well and lists the steps that can't work as written. You don't need a robot or any lab data to use it.</p>
+</div>
+
+<div class="wide"><figure>
+<div class="row"><span class="lbl" style="margin:0">Figure 1</span><span class="sp"></span><span id="pname" class="mono" style="color:var(--mute)"></span></div>
+<div class="row" id="protos" style="margin-top:8px"></div>
+<div class="fig scope">
+<div>
+<div class="row" style="margin-bottom:8px"><button class="b" id="play">Play</button><button class="b" id="stepb">Step</button><button class="b" id="reset">Reset</button></div>
+<svg id="plate" viewBox="0 0 680 520" role="img" aria-label="96-well plate simulation"></svg>
+<div class="key"><span><i style="background:var(--buf)"></i>buffer</span><span><i style="background:var(--sam)"></i>sample</span><span><i style="background:var(--dye)"></i>dye</span><span>dashed ring: required control</span></div>
+<div class="verdict" id="verdict" aria-live="polite"></div></div>
+<div><p class="lbl">Reagent left</p><div id="gauges"></div><p class="lbl" style="margin-top:22px">Log</p><ol id="log"></ol></div>
+</div>
+<figcaption>Eight steps on a 96-well plate. The pipette takes 20–300 µL and a well holds 200 µL. Press Play, or use the buttons to put one random mistake into the protocol and see what gets reported. The rules here are written in JavaScript. The real version will be Python.</figcaption>
+</figure></div>
+
+<div class="col">
+<h2>What it checks</h2>
+<ol class="plain">
+<li><code>PIPETTE_RANGE</code>: the volume is within the pipette's range.</li>
+<li><code>REAGENT_EMPTY</code>: the source still has enough left when the step runs.</li>
+<li><code>WELL_OVERFLOW</code>: no well ends up over its capacity.</li>
+<li><code>WELL_MISSING</code>: the well exists on that plate (there is no I1 on a 96-well plate).</li>
+<li><code>CONTROL_MISSING</code>: the negative and positive control wells get filled.</li>
+<li><code>DEAD_VOLUME</code>: optional. A source isn't emptied below the volume the pipette can't reach. Off in the figure above.</li></ol>
+<p>Each failure is listed with its step number and a one-line reason.</p>
+<h2>Where this comes from</h2>
+<p>I'm building this over four weeks. It starts from the Laboratory Automation Protocol format in <a href="https://pubs.acs.org/doi/10.1021/acssynbio.3c00397" target="_blank" rel="noopener">this ACS Synthetic Biology paper</a>. First I reproduce the paper's format, then I add the rules, then I break protocols on purpose and count how many the checker catches. The plan is on the <a href="#" data-go="report">report page</a>, sample protocols and reference numbers are on <a href="#" data-go="data">data</a>, and the benchmark so far is on <a href="#" data-go="results">results</a>.</p>
+<p>To make your own protocol, click wells on the <a href="#" data-go="build">Build page</a>, or paste JSON into <a href="#" data-go="validate">Try it</a>. The <a href="#" data-go="glossary">glossary</a> explains the lab words.</p>
+</div>
+</section>
+
+<section data-p="validate"><div class="wide">
+<div class="col" style="margin:0;padding:0"><h1>Try it</h1>
+<p class="sub">Paste a protocol as JSON and run the checks. Nothing leaves your browser.</p></div>
+<div class="fig" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr);border-top:0">
+<div><div class="row" style="margin-bottom:10px"><button class="b" id="vrun">Validate</button><button class="b" id="vfault">Add a random error</button><button class="b" id="vfixed">Reset to example</button></div>
+<textarea id="vin" spellcheck="false" aria-label="Protocol JSON"></textarea>
+<p class="mono" style="color:var(--mute);margin-top:8px">reagents: µL available · pipette: min, max · well_capacity · dead_volume · plate: 96 or 384 · controls · steps: from, to, ul</p></div>
+<div id="vout" aria-live="polite"><p style="color:var(--mute)">Results appear here.</p></div></div></div>
+</section>
+
+<section data-p="method"><div class="col">
+<h1>Method</h1>
+<p class="sub">Protocol in, verdict and list of failures out.</p>
+<ol class="plain">
+<li><b>Parse.</b> Read reagents, volumes, labware and steps from YAML or JSON, using the LAP format.</li>
+<li><b>Simulate.</b> Go through each transfer and update the volume in every source and well.</li>
+<li><b>Check.</b> Test every rule after each step.</li>
+<li><b>Report.</b> List the step, the rule and why it failed.</li></ol>
+<h2>Rules</h2></div>
+<div class="col"><div class="tw"><table><thead><tr><th>Code</th><th>Fails when</th></tr></thead><tbody>
+<tr><td><code class="k">PIPETTE_RANGE</code></td><td>The volume is below the minimum or above the maximum</td></tr>
+<tr><td><code class="k">REAGENT_EMPTY</code></td><td>The running stock of a source drops below zero</td></tr>
+<tr><td><code class="k">WELL_OVERFLOW</code></td><td>A well's accumulated volume goes over its capacity</td></tr>
+<tr><td><code class="k">WELL_MISSING</code></td><td>The well is outside the plate's rows and columns</td></tr>
+<tr><td><code class="k">CONTROL_MISSING</code></td><td>A required control well is never dispensed into</td></tr>
+<tr><td><code class="k">DEAD_VOLUME</code></td><td>A source is left with less than its dead volume (optional, off by default)</td></tr></tbody></table></div>
+<h2>An example step</h2>
+<pre>reagents:
+  buffer: {labware: reservoir, well: A1, ul: 1000}
+  dye:    {labware: tubes,     well: A1, ul: 40}
+controls: {negative: A1, positive: A12}
+steps:
+  - id: 4
+    transfer: {from: dye, to: B1, ul: 15}
+# step 4 fails: 15 µL is below the 20 µL minimum</pre>
+<h2>How I'll know it works</h2>
+<p>Unit tests only show the rules run. To see if they catch mistakes, I take a valid protocol, put in one known error, and check that LabCheck reports that error code. The score is how many it catches for each type of error. I also run the untouched protocols to count false alarms.</p>
+<h2>What it will not catch</h2>
+<p>It knows nothing about viscosity, evaporation, collisions on the deck, timing, or whether the experiment makes sense biologically. A pass only means the protocol agrees with itself. The assay could still fail.</p>
+<p style="color:var(--mute);font-size:15.5px">Planned stack: Python, pytest, YAML/JSON protocol files, and the Opentrons API where it fits.</p>
+</div></section>
+
+<section data-p="results"><div class="wide">
+<div class="col" style="margin:0;padding:0"><h1>Results</h1>
+<p class="sub">What the checker catches in generated protocols.</p>
+<p><b>Don't quote these yet.</b> The protocols come from a random generator, not from real experiments, and a script that knows the rules adds the errors. Good numbers on the first five rows only show the code works. They say nothing about real protocols. That test comes after week 4.</p></div>
+<div class="row" style="margin:18px 0 0"><label class="mono">seed <input id="seed" type="number" value="7"></label><label class="mono">protocols <select id="nsel"><option>100</option><option selected>300</option><option>1000</option></select></label><button class="b" id="go">Run</button></div>
+<h2>One error at a time</h2>
+<p>Each protocol gets one mistake. "Caught" means the checker reported that rule's code. For the two rows with no rule, it means the checker reported anything.</p>
+<div class="tw"><table><thead><tr><th>Injected error</th><th>Target</th><th class="num">n</th><th class="num">Caught</th><th class="num">Rate</th><th class="num">95% interval</th><th></th></tr></thead><tbody id="tA"></tbody></table></div>
+<p class="mono" style="color:var(--mute)">Interval: Wilson score. Swapped reagent and moved dispense have no rule, so any catch there is by accident: the change happened to cause an overflow, an empty source or a missing control.</p>
+<h2>Several errors at once</h2>
+<p>Two or three different mistakes in one protocol. It only counts if every injected code is reported.</p>
+<div class="tw"><table><thead><tr><th>Injected together</th><th class="num">n</th><th class="num">All found</th><th class="num">Rate</th><th class="num">95% interval</th></tr></thead><tbody id="tB"></tbody></table></div>
+<h2>What gets reported</h2>
+<p>For each kind of injection, how many runs reported each code. A run can report more than one. Bold marks the code the injection was aimed at.</p>
+<div class="tw"><table class="mx"><thead><tr><th>Injected</th><th class="num">PIPETTE_RANGE</th><th class="num">REAGENT_EMPTY</th><th class="num">WELL_OVERFLOW</th><th class="num">WELL_MISSING</th><th class="num">CONTROL_MISSING</th><th class="num">nothing</th></tr></thead><tbody id="tC"></tbody></table></div>
+<h2>The base protocols</h2>
+<p id="tD"></p>
+<div class="hist" id="hist"></div><div class="axisrow"></div>
+<p id="fp" class="mono"></p>
+<h2>Still to do</h2>
+<p class="todo">After week 4: protocols from real experiments, error types chosen by someone other than me, and a list of misses with the reason for each.</p>
+</div></section>
+
+<section data-p="data"><div class="wide">
+<div class="col" style="margin:0;padding:0"><h1>Data</h1>
+<p class="sub">The protocols and reference numbers the checker works with.</p></div>
+<h2>Sample protocols</h2>
+<p>Nine small protocols I wrote by hand. The checker runs on each when you open this page, so the result column isn't typed in. "Open in Build" loads one into the builder.</p>
+<div class="tw"><table><thead><tr><th>#</th><th>Protocol</th><th class="num">Steps</th><th class="num">µL moved</th><th class="num">Wells</th><th>Result</th><th></th></tr></thead><tbody id="lib"></tbody></table></div>
+<h2>Pipettes</h2>
+<p>Single-channel ranges for the Opentrons OT-2 GEN2 pipettes. The checker's default 20–300 µL range comes from the P300.</p>
+<div class="tw"><table><thead><tr><th>Pipette</th><th class="num">Min µL</th><th class="num">Max µL</th></tr></thead><tbody>
+<tr><td>P20</td><td class="num">1</td><td class="num">20</td></tr><tr><td>P300</td><td class="num">20</td><td class="num">300</td></tr><tr><td>P1000</td><td class="num">100</td><td class="num">1000</td></tr></tbody></table></div>
+<h2>Plates</h2>
+<p>Well volumes depend on the manufacturer and the well shape, so these are rough. The demo here uses 200 µL as the well limit. For a real plate, use its datasheet.</p>
+<div class="tw"><table><thead><tr><th>Format</th><th>Rows</th><th>Columns</th><th class="num">Wells</th><th class="num">Typical max µL per well</th></tr></thead><tbody>
+<tr><td>96-well</td><td>A–H (8)</td><td>1–12</td><td class="num">96</td><td class="num">about 360</td></tr>
+<tr><td>384-well</td><td>A–P (16)</td><td>1–24</td><td class="num">384</td><td class="num">about 110</td></tr></tbody></table></div>
+</div></section>
+
+<section data-p="report"><div class="col">
+<h1>Report</h1>
+<p class="sub">Draft. Orange parts aren't written yet.</p>
+<h2>Abstract</h2>
+<p>Liquid handlers run protocols exactly as written, so a mistake in the protocol becomes a mistake in the experiment. LabCheck simulates a structured protocol, checks it against six rules before it runs, and explains each failure. I measure how well it works by injecting known errors into valid protocols. <span class="todo">Final figures to come.</span></p>
+<h2>Background</h2>
+<p>The Laboratory Automation Protocol format, described in <a href="https://pubs.acs.org/doi/10.1021/acssynbio.3c00397" target="_blank" rel="noopener">ACS Synthetic Biology</a>, gives automated experiments a shared structure. LabCheck adds a validation step on top of it. It is meant for lab automation and assay development, where the run only works if the protocol was right to begin with.</p>
+<h2>Design</h2>
+<p>Four parts: a parser, a transfer simulator, a rule engine and a report writer. The <a href="#" data-go="method">method page</a> describes them.</p>
+<h2>Evaluation</h2>
+<p>Error injection gives a detection rate for each error type, and clean protocols give the false alarm count. A first test is on the <a href="#" data-go="results">results page</a>. <span class="todo">Full evaluation to come.</span></p>
+<h2>Limitations</h2>
+<p>The checker only finds what its rules describe. It doesn't model liquid properties, deck layout, timing or biology. A pass means the protocol is consistent with itself, nothing more.</p>
+<h2>Plan</h2>
+<div class="tw"><table><thead><tr><th>Week</th><th>Goal</th><th>Status</th></tr></thead><tbody>
+<tr><td>1</td><td>Reproduce the paper's protocol representation and one example workflow</td><td class="todo">not started</td></tr>
+<tr><td>2</td><td>Implement the validation rules and unit tests</td><td class="todo">not started</td></tr>
+<tr><td>3</td><td>Add simulated execution, error injection and audit logs</td><td class="todo">not started</td></tr>
+<tr><td>4</td><td>Benchmark detection, write up limitations, publish the repository</td><td class="todo">not started</td></tr></tbody></table></div>
+<h2>Log</h2><div class="tw"><table><thead><tr><th>Date</th><th>Entry</th></tr></thead><tbody><tr><td>14 Oct 2026</td><td>Project page published. Browser reference checker, simulator, builder and validator working. Python implementation not started.</td></tr><tr><td>15 Oct 2026</td><td>Added sample protocols, reference tables, a benchmark on generated protocols (seven kinds of error), and an analysis page with charts and timing.</td></tr></tbody></table></div>
+</div></section>
+
+<section data-p="build"><div class="wide">
+<div class="col" style="margin:0;padding:0"><h1>Build</h1>
+<p class="sub">Click wells to make a protocol. Pick a reagent, set a volume, then click a well to put it there. The checker runs after every click.</p></div>
+<div class="fig scope">
+<div>
+<div class="row" style="margin-bottom:8px"><span class="mono">reagent</span><span class="row" id="breag"></span><label class="mono">µL <input id="bvol" type="number" value="50" min="1" max="400"></label></div>
+<svg id="bplate" viewBox="0 0 680 440" role="group" aria-label="Click a well to dispense into it"></svg>
+<div class="verdict" id="bverdict" aria-live="polite"></div></div>
+<div><p class="lbl">Reagent left</p><div id="bgauges"></div>
+<p class="lbl" style="margin-top:20px">Steps</p><div class="tw"><table style="min-width:0"><tbody id="bsteps"></tbody></table></div>
+<div class="row" style="margin-top:12px"><button class="b" id="bfix">Load example</button><button class="b" id="bclear">Clear</button><button class="b" id="bsend">Send to Try it</button></div></div>
+</div></div></section>
+
+<section data-p="glossary"><div class="col">
+<h1>Glossary</h1>
+<p class="sub">Lab words used on this site.</p>
+<dl>
+<dt>Assay</dt><dd>A lab test that measures something, such as how much of a molecule is in a sample.</dd>
+<dt>Dead volume</dt><dd>Liquid left in a tube or reservoir that the pipette cannot pick up.</dd>
+<dt>Error injection</dt><dd>Adding one known mistake to a correct protocol to see whether a checker notices it.</dd>
+<dt>False alarm</dt><dd>The checker flags a protocol that was actually fine.</dd>
+<dt>LAP (Laboratory Automation Protocol)</dt><dd>A structured way to describe automated experiments, from the paper this project starts with.</dd>
+<dt>Liquid handler</dt><dd>A robot that moves measured volumes of liquid between containers.</dd>
+<dt>Negative control</dt><dd>A well that should show no signal, so you can see the background level.</dd>
+<dt>Pipette range</dt><dd>The smallest and largest volumes a pipette can measure reliably, for example 20–300 µL.</dd>
+<dt>Plate</dt><dd>A tray of small wells. A 96-well plate has rows A–H and columns 1–12. A 384-well plate has rows A–P and columns 1–24.</dd>
+<dt>Positive control</dt><dd>A well that should show a signal, so you know the assay can work.</dd>
+<dt>Protocol</dt><dd>The ordered list of steps an experiment follows: what to move, how much, and where.</dd>
+<dt>Reservoir</dt><dd>A trough holding a bulk reagent that the pipette draws from.</dd>
+<dt>Well</dt><dd>One small cup in a plate, named by row and column, such as B3.</dd>
+<dt>µL</dt><dd>Microlitre, a millionth of a litre.</dd></dl>
+</div></section>
+
+<section data-p="analysis"><div class="wide">
+<div class="col" style="margin:0;padding:0"><h1>Analysis</h1>
+<p class="sub">Charts drawn in your browser by the same checker.</p></div>
+
+<h2>One protocol</h2>
+<p>Pick a protocol to see what it does to the reagents and the plate. The example is the one on the home page and the others are on the Data page.</p>
+<div class="row" style="margin:6px 0 0"><label class="mono">protocol <select id="asel"></select></label></div>
+<div class="charts">
+<figure class="full"><div id="c9"></div><figcaption>Where the liquid goes. Each band is one reagent going into one well, and its width is the volume.</figcaption></figure>
+<figure class="full"><div id="c10"></div><figcaption>The plate after each step. A red ring means that step has a problem.</figcaption></figure>
+<figure><div id="c1"></div><figcaption>Reagent left after each step, as a share of what it started with. Below the dashed line means the tube ran empty.</figcaption></figure>
+<figure><div id="c11"></div><figcaption>Total liquid moved so far, stacked by reagent.</figcaption></figure>
+<figure><div id="c2"></div><figcaption>Liquid in each filled well at the end. Wells over the limit are red.</figcaption></figure>
+<figure><div id="c3"></div><figcaption>Size of each transfer. The grey band is the pipette's range and dots outside it are red.</figcaption></figure>
+<figure><div id="c12"></div><figcaption>Problems reported at each step. The last bar counts problems that only show at the end, like a control well that was never filled.</figcaption></figure></div>
+
+<h2>Generated protocols</h2>
+<p>This and the next two sections use a set of random valid protocols, the same kind the benchmark uses. Change the seed or the count and press Recompute.</p>
+<div class="row" style="margin:6px 0 0"><label class="mono">seed <input id="aseed" type="number" value="7"></label><label class="mono">protocols <select id="ansel"><option>100</option><option selected>300</option><option>1000</option></select></label><button class="b" id="ago">Recompute</button></div>
+<div class="charts">
+<figure class="full"><div id="c4"></div><figcaption>Average µL each well receives per protocol. A1 and A12 are the control wells, so they are always filled.</figcaption></figure>
+<figure><div id="c13"></div><figcaption>Average µL per protocol going into each row.</figcaption></figure>
+<figure><div id="c14"></div><figcaption>The same by column. Columns 1 and 12 are higher because the controls in A1 and A12 are always filled.</figcaption></figure>
+<figure><div id="c5"></div><figcaption>How many transfers there are of each size, across all the protocols.</figcaption></figure>
+<figure><div id="c15"></div><figcaption>Number of steps per protocol.</figcaption></figure>
+<figure><div id="c16"></div><figcaption>Each dot is one protocol: how many steps it has and how much liquid it moves.</figcaption></figure>
+<figure><div id="c17"></div><figcaption>How much of each stock a protocol uses. The box is the middle half, the thick line is the median, and the whiskers are the 10th and 90th percentiles.</figcaption></figure></div>
+
+<h2>Detection</h2>
+<p>These come from injecting errors into the generated protocols, as on the Results page.</p>
+<div class="charts">
+<figure><div id="c18"></div><figcaption>Detection rate for each kind of error, with a 95% interval. The two red rows have no rule, so any catch there is by accident.</figcaption></figure>
+<figure><div id="c19"></div><figcaption>Share of protocols where every injected error was found, as the number of errors per protocol goes up. Dashed lines are the 95% interval.</figcaption></figure>
+<figure><div id="c20"></div><figcaption>Total problems reported when three errors are injected at once. It is often more than three, because one mistake can cause others.</figcaption></figure>
+<figure><div id="c21"></div><figcaption>How far into the protocol the first problem is reported, for errors that happen at a step. 0% is the first step.</figcaption></figure>
+<figure><div id="c22"></div><figcaption>Which codes are reported together when three errors are injected. The diagonal is how often that code showed up at all.</figcaption></figure></div>
+
+<h2>What if the limits were different?</h2>
+<p>The generated protocols were made for a 200 µL well and a 20 µL pipette minimum. Here the limits change and the checker runs again on the same protocols. The dashed line or red box marks the values they were built for.</p>
+<div class="charts">
+<figure><div id="c6"></div><figcaption>Protocols flagged for overflow as the well limit goes down.</figcaption></figure>
+<figure><div id="c7"></div><figcaption>Protocols flagged for pipette range as the pipette minimum goes up.</figcaption></figure>
+<figure><div id="c23"></div><figcaption>Both limits at once. Each cell is the share of protocols flagged for overflow or pipette range.</figcaption></figure>
+<figure><div id="c24"></div><figcaption>Share of protocols that would run out of a reagent if its tube held this much.</figcaption></figure></div>
+
+<h2>How fast is it?</h2>
+<p>Time to check one protocol of a given length. The test protocol has no errors, so this measures the bookkeeping and not the error reporting.</p>
+<div class="charts"><figure><div id="c8"></div><figcaption id="tsum"></figcaption></figure></div>
+<div class="row" style="margin-top:10px"><button class="b" id="atime">Time it again</button></div>
+</div></section>
+
+<footer><div class="col">Contact: <a href="mailto:harshinisuresha7@gmail.com">harshinisuresha7@gmail.com</a>. Code: <span class="todo">repository link to add</span>.</div></footer>
+
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const COLHEX={buffer:'#40aaff',dye:'#ff468c',sample:'#ffaa32'},COL={buffer:[64,170,255],dye:[255,70,140],sample:[255,170,50]},CSS={buffer:'var(--buf)',dye:'var(--dye)',sample:'var(--sam)'};
+const S0={buffer:1000,dye:40,sample:120},CTRL={A1:'negative',A12:'positive'};
+const DEF={stock:S0,dead:0,pmin:20,pmax:300,cap:200,rows:'ABCDEFGH',cols:12,ctrl:CTRL};
+const FAULT=[[1,'buffer','A1',100],[2,'buffer','B1',100],[3,'sample','B1',50],[4,'dye','B1',15],[5,'dye','B2',30],[6,'buffer','B2',250],[7,'buffer','I1',100]];
+const FIXED=[[1,'buffer','A1',100],[2,'buffer','B1',100],[3,'sample','B1',50],[4,'dye','B1',20],[5,'dye','B2',20],[6,'buffer','B2',100],[7,'buffer','H12',100],[8,'sample','A12',50]];
+function sim(steps,cfg=DEF){
+ const wellOk=w=>{const m=/^([A-Z])(\d+)$/.exec(String(w));return !!m&&cfg.rows.includes(m[1])&&+m[2]>=1&&+m[2]<=cfg.cols};
+ const stock={...cfg.stock},wells={},frames=[];
+ for(const [i,r,w,v] of steps){
+  const errs=[],valid=wellOk(w);
+  if(!(r in stock))errs.push(['UNKNOWN_REAGENT',`${r} is not declared in reagents`]);
+  else{stock[r]-=v;if(stock[r]<0)errs.push(['REAGENT_EMPTY',`${r} is short by ${-stock[r]} µL`]);else if(stock[r]<(cfg.dead||0))errs.push(['DEAD_VOLUME',`${r} is left with ${stock[r]} µL, below its ${cfg.dead} µL dead volume`])}
+  if(v<cfg.pmin||v>cfg.pmax)errs.push(['PIPETTE_RANGE',`${v} µL is outside the ${cfg.pmin}–${cfg.pmax} µL pipette range`]);
+  if(!valid)errs.push(['WELL_MISSING',`${w} does not exist on this plate`]);
+  else{const o=wells[w]||(wells[w]={v:0,c:[0,0,0]});o.v+=v;const c=COL[r]||[120,130,140];o.c=o.c.map((x,k)=>x+c[k]*v);if(o.v>cfg.cap)errs.push(['WELL_OVERFLOW',`${w} would hold ${o.v} µL, max ${cfg.cap} µL`])}
+  frames.push(cfg.nosnap?{i,r,w,v,errs,valid}:{i,r,w,v,errs,valid,stock:{...stock},wells:JSON.parse(JSON.stringify(wells))});
+ }
+ const miss=Object.entries(cfg.ctrl).filter(([w])=>!wells[w]).map(([w,t])=>['CONTROL_MISSING',`${t} control ${w} is never dispensed into`,w]);
+ return{frames,miss}}
+function prng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const TYPES=['PIPETTE_RANGE','REAGENT_EMPTY','WELL_OVERFLOW','WELL_MISSING','CONTROL_MISSING'];
+function mutate(type,base,rnd){
+ const s=base.map(x=>x.slice()),pick=a=>a[Math.floor(rnd()*a.length)];
+ if(type==='PIPETTE_RANGE'){pick(s)[3]=rnd()<.5?1+Math.floor(rnd()*18):301+Math.floor(rnd()*100)}
+ if(type==='REAGENT_EMPTY'){pick(s.filter(y=>y[1]==='dye'))[3]=45+Math.floor(rnd()*250)}
+ if(type==='WELL_OVERFLOW'){pick(s.filter(y=>y[1]==='buffer'))[3]=300}
+ if(type==='WELL_MISSING'){pick(s)[2]=pick(['I1','A13','J4','H0','K12'])}
+ if(type==='CONTROL_MISSING'){const c=pick(['A1','A12']);return s.filter(y=>y[2]!==c)}
+ return s}
+const codes=st=>{const r=sim(st);return[...r.frames.flatMap(f=>f.errs.map(e=>e[0])),...r.miss.map(e=>e[0])]};
+/* plate */
+const ROWS='ABCDEFGH',X=i=>46+i*52,Y=i=>44+i*50;
+function plateHTML(p,extra){let h='';
+ for(let c=0;c<12;c++)h+=`<text class="axis" x="${X(c)}" y="22">${c+1}</text>`;
+ ROWS.split('').forEach((r,ri)=>{h+=`<text class="axis" x="14" y="${Y(ri)+4}">${r}</text>`;
+  for(let c=0;c<12;c++)h+=`<circle class="well" cx="${X(c)}" cy="${Y(ri)}" r="21"/><circle id="${p}-l-${r}${c+1}" cx="${X(c)}" cy="${Y(ri)}" r="19.5" fill="none" class="liq" style="transform:scale(0)"/>`});
+ for(const w in CTRL)h+=`<circle class="ctrl" cx="${X(+w.slice(1)-1)}" cy="${Y(0)}" r="25"/>`;
+ return h+extra}
+const gaugeHTML=p=>Object.keys(S0).map(k=>`<div class="g"><div class="t"><span>${k}</span><span id="${p}-gv-${k}"></span></div><div class="tr"><i id="${p}-gb-${k}" style="background:${CSS[k]};width:100%"></i></div></div>`).join('');
+function setGauges(p,st){for(const r in S0){const v=st[r];$('#'+p+'-gb-'+r).style.width=Math.max(0,v/S0[r]*100)+'%';const g=$('#'+p+'-gv-'+r);g.textContent=v<0?`short by ${-v} µL`:`${v} / ${S0[r]} µL`;g.style.color=v<0?'var(--fail)':''}}
+function paintWells(p,wells){const red=getComputedStyle(document.documentElement).getPropertyValue('--fail').trim()||'#a3361c';
+ for(const r of ROWS)for(let c=1;c<=12;c++){const id=r+c,e=$('#'+p+'-l-'+id),o=wells[id];
+  if(o){const over=o.v>DEF.cap;e.style.transform=`scale(${over?1.08:Math.sqrt(o.v/DEF.cap)*.95})`;e.setAttribute('fill',`rgb(${o.c.map(x=>Math.round(x/o.v)).join(',')})`);e.setAttribute('stroke',over?red:'none');e.setAttribute('stroke-width',over?3:0)}
+  else{e.style.transform='scale(0)';e.setAttribute('stroke','none')}}}
+$('#plate').innerHTML=plateHTML('s',`<circle id="hi" r="25" cx="-50" cy="-50"/><g id="ghost" opacity="0"><circle r="21" fill="none" stroke="var(--fail)" stroke-width="1.5" stroke-dasharray="4 4"/><text class="axis" style="fill:var(--fail);font-size:15px" y="5">✕</text><text id="gt" class="axis" style="fill:var(--fail);font-size:11px" y="40"></text></g><circle id="mc" class="pulse" r="27" fill="none" stroke="var(--warn)" stroke-width="3" cx="-50" cy="-50" opacity="0"/><g id="head" style="transform:translate(-90px,-90px)"><path id="hp" d="M-8 -52h16v26l-5 24h-6l-5-24z" fill="#fff" opacity=".95"/><rect x="-10" y="-58" width="20" height="8" rx="3" fill="#fff" opacity=".5"/></g>`);
+$('#gauges').innerHTML=gaugeHTML('s');
+let drawTok=0,lastK=-1;
+let proto={name:'Example protocol'},R=sim(FIXED),k=-1,timer=null;
+function draw(){
+ const f=R.frames[k];
+ const tok=++drawTok,going=!!f&&k>lastK;lastK=k;
+ const head=$('#head');
+ if(f){const w=wxy(f.w);head.style.transform=`translate(${X(w.ci)}px,${Y(w.ri)-12}px)`;$('#hp').style.fill=COLHEX[f.r]||'#fff'}else head.style.transform='translate(-90px,-90px)';
+ if(going)setTimeout(()=>{if(tok!==drawTok)return;paintWells('s',f.wells);const w=wxy(f.w);splash('#plate',X(w.ci),Y(Math.min(w.ri,8)),COLHEX[f.r]||'#fff',f.errs.length>0)},520);else paintWells('s',f?f.wells:{});
+ const hi=$('#hi'),gh=$('#ghost'),mc=$('#mc');gh.setAttribute('opacity',0);hi.setAttribute('cx',-50);mc.setAttribute('opacity',0);
+ if(f){const m=/^([A-Z])(\d+)$/.exec(f.w),ci=Math.min(Math.max(+m[2]-1,0),12),ri=ROWS.includes(m[1])?ROWS.indexOf(m[1]):8;
+  if(f.valid){hi.setAttribute('cx',X(ci));hi.setAttribute('cy',Y(ri))}
+  else{gh.setAttribute('transform',`translate(${X(ci)},${Y(Math.min(ri,8))-4})`);gh.setAttribute('opacity',1);$('#gt').textContent=f.w+' not on plate'}}
+ const st=f?f.stock:S0;
+ setGauges('s',st);
+ const done=k===R.frames.length-1;
+ let li='';for(let j=0;j<=k;j++){const x=R.frames[j];li+=`<li class="${x.errs.length?'bad':''}">step ${x.i}: ${x.r} → ${x.w}, ${x.v} µL${x.errs.map(e=>`<small>${e[0]}: ${esc(e[1])}</small>`).join('')}</li>`}
+ if(done)for(const m of R.miss)li+=`<li class="bad">end of run<small>${m[0]}: ${m[1]}</small></li>`;
+ if(k<0)li='<li style="color:var(--mute)">Press Play.</li>';
+ $('#log').innerHTML=li;$('#log').scrollTop=1e5;
+ if(done&&R.miss.length){const w=R.miss[0][2];mc.setAttribute('cx',X(+w.slice(1)-1));mc.setAttribute('cy',Y(0));mc.setAttribute('opacity',1)}
+ const n=R.frames.reduce((a,x)=>a+x.errs.length,0)+R.miss.length,v=$('#verdict');
+ const showV=()=>{if(tok!==drawTok)return;v.textContent=!done?'':n?`FAILED: ${n} violation${n>1?'s':''}. Do not run this protocol.`:'PASSED: safe to execute.';v.style.color=n?'var(--fail)':'var(--pass)';if(done)pop(v,n?'fail':'pass')};
+ if(going&&done)setTimeout(showV,720);else showV();
+ $('#pname').textContent=proto.name}
+function stop(){clearInterval(timer);timer=null;$('#play').textContent='Play'}
+function adv(){if(k<R.frames.length-1){k++;draw()}if(k>=R.frames.length-1)stop()}
+$('#play').onclick=()=>{if(timer)return stop();if(k>=R.frames.length-1)k=-1;$('#play').textContent='Pause';adv();if(k<R.frames.length-1)timer=setInterval(adv,1000)};
+$('#stepb').onclick=()=>{stop();if(k>=R.frames.length-1)k=-1;adv()};
+$('#reset').onclick=()=>{stop();k=-1;draw()};
+function load(name,steps){stop();proto={name};R=sim(steps);k=-1;draw();$('#play').click()}
+const P=[{n:'Example',s:()=>FIXED},...TYPES.map(t=>({n:'Inject '+t.toLowerCase().replace('_',' '),s:()=>mutate(t,FIXED,Math.random)}))];
+$('#protos').innerHTML=P.map((p,i)=>`<button class="b" data-i="${i}">${p.n}</button>`).join('');
+$$('#protos button').forEach(b=>b.onclick=()=>{const p=P[b.dataset.i];load(p.n==='Example'?'Example protocol':'Example + '+p.n.toLowerCase(),p.s())});
+
+/* validator */
+const EX_FAULT={plate:96,reagents:{buffer:1000,dye:40,sample:120},pipette:{min:20,max:300},well_capacity:200,controls:{A1:'negative',A12:'positive'},steps:FAULT.map(s=>({from:s[1],to:s[2],ul:s[3]}))};
+const EX_FIXED={...EX_FAULT,steps:FIXED.map(s=>({from:s[1],to:s[2],ul:s[3]}))};
+const fmt=o=>JSON.stringify(o,null,2).replace(/\{\s+"from": ("[^"]*"),\s+"to": ("[^"]*"),\s+"ul": ([\d.]+)\s+\}/g,'{"from": $1, "to": $2, "ul": $3}');
+$('#vin').value=fmt(EX_FIXED);
+$('#vfault').onclick=()=>{const t=TYPES[Math.floor(Math.random()*TYPES.length)],o={...EX_FIXED,steps:mutate(t,FIXED,Math.random).map(s=>({from:s[1],to:s[2],ul:s[3]}))};$('#vin').value=fmt(o);vrun()};$('#vfixed').onclick=()=>{$('#vin').value=fmt(EX_FIXED);vrun()};
+function vrun(){
+ const out=$('#vout'),bad=m=>out.innerHTML=`<p class="bad"><b>Could not read the protocol.</b> ${esc(m)}</p>`;
+ let j;try{j=JSON.parse($('#vin').value)}catch(e){return bad(e.message)}
+ if(!j||typeof j.reagents!=='object'||!j.reagents)return bad('"reagents" must be an object such as {"buffer": 1000}.');
+ if(!Array.isArray(j.steps)||!j.steps.length)return bad('"steps" must be a non-empty list.');
+ const plate=+(j.plate||96);if(![96,384].includes(plate))return bad('"plate" must be 96 or 384.');
+ const steps=[];for(const [n,s] of j.steps.entries()){if(!s||typeof s.from!=='string'||typeof s.to!=='string'||typeof s.ul!=='number'||!isFinite(s.ul))return bad(`Step ${n+1} needs "from" (text), "to" (text) and "ul" (number).`);steps.push([n+1,s.from,s.to.toUpperCase(),s.ul])}
+ const cfg={stock:j.reagents,pmin:j.pipette?.min??20,pmax:j.pipette?.max??300,cap:j.well_capacity??200,dead:+(j.dead_volume||0),rows:plate===96?'ABCDEFGH':'ABCDEFGHIJKLMNOP',cols:plate===96?12:24,ctrl:j.controls||{}};
+ const r=sim(steps,cfg),n=r.frames.reduce((a,x)=>a+x.errs.length,0)+r.miss.length;
+ let h=`<p class="verdict ${n?'bad':'ok'}" style="margin:0 0 8px">${n?`FAILED: ${n} violation${n>1?'s':''}. Do not run this protocol.`:'PASSED: safe to execute.'}</p><div class="tw"><table><thead><tr><th>Step</th><th>Transfer</th><th>Result</th></tr></thead><tbody>`;
+ for(const f of r.frames)h+=`<tr><td>${f.i}</td><td>${esc(f.r)} → ${esc(f.w)}, ${f.v} µL</td><td>${f.errs.length?f.errs.map(e=>`<span class="bad">${e[0]}</span><br>${esc(e[1])}`).join('<br>'):'<span class="ok">pass</span>'}</td></tr>`;
+ for(const m of r.miss)h+=`<tr><td>end</td><td>control check</td><td><span class="bad">${m[0]}</span><br>${esc(m[1])}</td></tr>`;
+ out.innerHTML=h+'</tbody></table></div>'}
+$('#vrun').onclick=vrun;
+
+/* builder */
+let bsteps=[],breag='buffer';
+$('#bplate').innerHTML=plateHTML('b','<circle id="b-mc" class="pulse" r="27" fill="none" stroke="var(--warn)" stroke-width="3" cx="-50" cy="-50" opacity="0"/>'+ROWS.split('').flatMap((r,ri)=>[...Array(12)].map((_,c)=>`<circle class="hit" data-w="${r}${c+1}" cx="${X(c)}" cy="${Y(ri)}" r="21" fill="transparent" tabindex="0" role="button" aria-label="Dispense into ${r}${c+1}"/>`)).join(''));
+$('#bgauges').innerHTML=gaugeHTML('b');
+$('#breag').innerHTML=Object.keys(S0).map(k=>`<button class="b" data-r="${k}" aria-pressed="${k===breag}">${k}</button>`).join('');
+$$('#breag button').forEach(b=>b.onclick=()=>{breag=b.dataset.r;$$('#breag button').forEach(x=>x.setAttribute('aria-pressed',x===b))});
+function badd(w){const v=+$('#bvol').value;if(!(v>0))return;bsteps.push([bsteps.length+1,breag,w,v]);drawBuilder();const q=wxy(w);splash('#bplate',X(q.ci),Y(q.ri),COLHEX[breag],false)}
+$$('#bplate .hit').forEach(h=>{h.onclick=()=>badd(h.dataset.w);h.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();badd(h.dataset.w)}}});
+function drawBuilder(){
+ const r=sim(bsteps),last=r.frames[r.frames.length-1];
+ paintWells('b',last?last.wells:{});setGauges('b',last?last.stock:S0);
+ const mc=$('#b-mc');mc.setAttribute('opacity',0);
+ if(bsteps.length&&r.miss.length){const w=r.miss[0][2];mc.setAttribute('cx',X(+w.slice(1)-1));mc.setAttribute('cy',Y(0));mc.setAttribute('opacity',1)}
+ const n=r.frames.reduce((a,x)=>a+x.errs.length,0)+r.miss.length,v=$('#bverdict');
+ v.textContent=!bsteps.length?'Click a well to add the first step.':n?`${n} problem${n>1?'s':''} so far.`:'No problems found.';
+ v.style.color=!bsteps.length?'var(--mute)':n?'var(--fail)':'var(--pass)';
+ let h=r.frames.map((f,i)=>`<tr><td>${f.i}</td><td>${f.r} → ${f.w}, ${f.v} µL${f.errs.map(e=>`<br><span class="bad">${e[0]}</span> ${esc(e[1])}`).join('')}</td><td><button class="x" data-rm="${i}" aria-label="Remove step ${f.i}">✕</button></td></tr>`).join('');
+ if(bsteps.length)h+=r.miss.map(m=>`<tr><td>end</td><td><span class="bad">${m[0]}</span> ${esc(m[1])}</td><td></td></tr>`).join('');
+ $('#bsteps').innerHTML=h||'<tr><td style="color:var(--mute)">No steps yet.</td></tr>';
+ $$('#bsteps [data-rm]').forEach(x=>x.onclick=()=>{bsteps.splice(+x.dataset.rm,1);bsteps.forEach((s,i)=>s[0]=i+1);drawBuilder()})}
+$('#bclear').onclick=()=>{bsteps=[];drawBuilder()};
+$('#bfix').onclick=()=>{bsteps=FIXED.map(s=>s.slice());drawBuilder()};
+$('#bsend').onclick=()=>{const o={...EX_FAULT,steps:bsteps.map(s=>({from:s[1],to:s[2],ul:s[3]}))};$('#vin').value=fmt(o);go('validate');vrun()};
+drawBuilder();
+
+/* results */
+const isWell=w=>/^[A-H](?:[1-9]|1[0-2])$/.test(w);
+const LIB=[
+['Blank and positive control','buffer in A1, sample in A12',[[1,'buffer','A1',100],[2,'sample','A12',50]]],
+['Three-sample series','sample in B1–D1 over a buffer base',[[1,'buffer','A1',100],[2,'buffer','B1',100],[3,'buffer','C1',100],[4,'buffer','D1',100],[5,'sample','B1',30],[6,'sample','C1',30],[7,'sample','D1',30],[8,'sample','A12',30]]],
+['Dye gradient','two dye wells, 20 µL each',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'dye','B1',20],[4,'dye','B2',20],[5,'buffer','B1',100],[6,'buffer','B2',150]]],
+['Full row of buffer','80 µL into A1–A12',[...Array(12)].map((_,i)=>[i+1,'buffer','A'+(i+1),80])],
+['Double dose into one well','B1 gets 120 µL twice',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'buffer','B1',120],[4,'buffer','B1',120]]],
+['Dye below pipette minimum','10 µL dye into B1',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'dye','B1',10]]],
+['Sample overdraw','three 50 µL draws from 120 µL',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'sample','B1',50],[4,'sample','C1',50]]],
+['Typo in a well name','B13 does not exist',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'buffer','B13',100]]],
+['No controls dispensed','only B1 and C1 are filled',[[1,'buffer','B1',100],[2,'sample','C1',50]]]];
+function renderLib(){$('#lib').innerHTML=LIB.map(([n,d,st],i)=>{const cs=[...new Set(codesOf(st,DEF))],ul=st.reduce((a,x)=>a+x[3],0),w=new Set(st.map(x=>x[2]).filter(isWell)).size;
+ return`<tr><td>${i+1}</td><td>${n}<br><span style="color:var(--mute)">${d}</span></td><td class="num">${st.length}</td><td class="num">${ul}</td><td class="num">${w}</td><td class="${cs.length?'bad':'ok'}">${cs.length?cs.join('<br>'):'pass'}</td><td><button class="b" data-lib="${i}">Open in Build</button></td></tr>`}).join('');
+ $$('#lib [data-lib]').forEach(b=>b.onclick=()=>{bsteps=LIB[b.dataset.lib][2].map(x=>x.slice());go('build')})}
+/* generated benchmark */
+const GCFG={stock:{buffer:4000,sample:800,dye:400},dead:0,pmin:20,pmax:300,cap:200,rows:'ABCDEFGH',cols:12,ctrl:CTRL,nosnap:true},ALLW=[];
+for(const r of ROWS)for(let c=1;c<=12;c++)ALLW.push(r+c);
+const codesOf=(st,cfg)=>{const r=sim(st,cfg);return[...r.frames.flatMap(f=>f.errs.map(e=>e[0])),...r.miss.map(e=>e[0])]};
+function genProto(rnd){const used={},stock={...GCFG.stock},steps=[],names=Object.keys(stock),n=8+Math.floor(rnd()*17);let g=0;
+ while(steps.length<n&&g++<600){const w=steps.length<2?['A1','A12'][steps.length]:ALLW[Math.floor(rnd()*ALLW.length)],r=names[Math.floor(rnd()*names.length)],mx=Math.min(120,GCFG.cap-(used[w]||0),stock[r]);
+  if(mx<20)continue;const v=20+5*Math.floor(rnd()*((mx-20)/5+1));steps.push([steps.length+1,r,w,v]);used[w]=(used[w]||0)+v;stock[r]-=v}
+ return steps}
+function inject(type,steps,cfg,rnd,taken){
+ const s=steps.map(x=>x.slice()),c2={...cfg,stock:{...cfg.stock}},pick=a=>a[Math.floor(rnd()*a.length)];
+ const one=()=>{const a=s.map((_,i)=>i).filter(i=>!taken.has(i)),i=pick(a.length?a:s.map((_,i)=>i));taken.add(i);return s[i]};
+ if(type==='PIPETTE_RANGE')one()[3]=rnd()<.5?1+Math.floor(rnd()*18):301+Math.floor(rnd()*100);
+ else if(type==='REAGENT_EMPTY'){const u={};s.forEach(x=>u[x[1]]=(u[x[1]]||0)+x[3]);const r=pick(Object.keys(u));c2.stock[r]=Math.max(0,u[r]-1-Math.floor(rnd()*20))}
+ else if(type==='WELL_OVERFLOW')one()[3]=300;
+ else if(type==='WELL_MISSING')one()[2]=pick(['I1','A13','J4','H0','K12','Z9']);
+ else if(type==='CONTROL_MISSING'){const c=pick(['A1','A12']);return{steps:s.filter(y=>y[2]!==c),cfg:c2}}
+ else if(type==='WRONG_REAGENT'){const x=one();x[1]=pick(Object.keys(GCFG.stock).filter(q=>q!==x[1]))}
+ else if(type==='WRONG_WELL'){const x=one();x[2]=pick(ALLW.filter(w=>w!==x[2]))}
+ return{steps:s,cfg:c2}}
+const SCOPE=['PIPETTE_RANGE','REAGENT_EMPTY','WELL_OVERFLOW','WELL_MISSING','CONTROL_MISSING'],OUT=['WRONG_REAGENT','WRONG_WELL'];
+function wilson(c,n){const z=1.96,p=c/n,d=1+z*z/n,m=p+z*z/(2*n),a=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n));return[Math.max(0,(m-a)/d),Math.min(1,(m+a)/d)]}
+function bench2(n,seed){
+ const rnd=prng(seed),bases=[];for(let i=0;i<n;i++)bases.push(genProto(rnd));
+ const single=[...SCOPE,...OUT].map(t=>{let hit=0;const conf={};
+  for(const b of bases){const r=inject(t,b,GCFG,rnd,new Set()),cs=new Set(codesOf(r.steps,r.cfg));cs.forEach(c=>conf[c]=(conf[c]||0)+1);if(!cs.size)conf.none=(conf.none||0)+1;if(SCOPE.includes(t)?cs.has(t):cs.size)hit++}
+  return{t,n,hit,conf,scope:SCOPE.includes(t)}});
+ const order=['CONTROL_MISSING','PIPETTE_RANGE','WELL_OVERFLOW','WELL_MISSING','REAGENT_EMPTY'];
+ const combos=[2,3].map(k=>{let hit=0;for(const b of bases){const ch=[...order].sort(()=>rnd()-.5).slice(0,k).sort((x,y)=>order.indexOf(x)-order.indexOf(y));let st=b,cfg=GCFG;const tk=new Set();
+  for(const t of ch){const r=inject(t,st,cfg,rnd,tk);st=r.steps;cfg=r.cfg}const cs=new Set(codesOf(st,cfg));if(ch.every(t=>cs.has(t)))hit++}return{k,n,hit}});
+ let fp=0,tot=0;const sizes={};for(const b of bases){if(codesOf(b,GCFG).length)fp++;sizes[b.length]=(sizes[b.length]||0)+1;tot+=b.reduce((a,x)=>a+x[3],0)}
+ return{single,combos,fp,n,sizes,meanSteps:bases.reduce((a,b)=>a+b.length,0)/n,meanUl:tot/n}}
+function runBench(){const n=+$('#nsel').value||300,b=bench2(n,+$('#seed').value||7),pc=(c,m)=>(100*c/m).toFixed(1)+'%',ci=(c,m)=>{const[l,h]=wilson(c,m);return`${(l*100).toFixed(1)}–${(h*100).toFixed(1)}%`};
+ $('#tA').innerHTML=b.single.map(r=>`<tr><td><code class="${r.scope?'k':''}">${r.t}</code></td><td>${r.scope?'rule':'no rule'}</td><td class="num">${r.n}</td><td class="num">${r.hit}</td><td class="num">${pc(r.hit,r.n)}</td><td class="num">${ci(r.hit,r.n)}</td><td><div class="meter"><i style="width:${100*r.hit/r.n}%"></i></div></td></tr>`).join('');
+ $('#tB').innerHTML=b.combos.map(r=>`<tr><td>${r.k} different errors</td><td class="num">${r.n}</td><td class="num">${r.hit}</td><td class="num">${pc(r.hit,r.n)}</td><td class="num">${ci(r.hit,r.n)}</td></tr>`).join('');
+ $('#tC').innerHTML=b.single.map(r=>`<tr><td><code>${r.t}</code></td>${[...SCOPE,'none'].map(c=>{const v=r.conf[c]||0;return`<td style="background:color-mix(in srgb,var(--ink) ${(v/r.n*34).toFixed(0)}%,transparent);${c===r.t?'font-weight:600':''}">${v}</td>`}).join('')}</tr>`).join('');
+ const ks=[...Array(17)].map((_,i)=>8+i),mx=Math.max(...ks.map(x=>b.sizes[x]||0))||1;
+ $('#tD').textContent=`${b.n} generated protocols, seed ${+$('#seed').value||7}. Average ${b.meanSteps.toFixed(1)} steps and ${Math.round(b.meanUl)} µL moved. Steps per protocol:`;
+ $('#hist').innerHTML=ks.map(x=>`<div style="height:${100*(b.sizes[x]||0)/mx}%" title="${x} steps: ${b.sizes[x]||0}"><span>${x%2?'':x}</span></div>`).join('');
+ $('#fp').textContent=`False alarms on the unmodified protocols: ${b.fp} of ${b.n}.`}
+$('#go').onclick=runBench;
+
+/* motion */
+const wxy=w=>{const m=/^([A-Z])(\d+)$/.exec(w);return{ci:Math.min(Math.max(+m[2]-1,0),12),ri:ROWS.includes(m[1])?ROWS.indexOf(m[1]):8}};
+let sid=0;
+function splash(sel,x,y,c,bad){const svg=$(sel);if(!svg||!svg.insertAdjacentHTML)return;const id='sp'+(++sid);
+ svg.insertAdjacentHTML('beforeend',`<g id="${id}"><circle class="drop" cx="${x}" cy="${y}" r="4.5" fill="${c}"/><circle class="rip" cx="${x}" cy="${y}" r="9" fill="none" stroke="${bad?'#ff7a63':c}" stroke-width="2"/></g>`);
+ setTimeout(()=>{const e=document.getElementById(id);e&&e.remove()},1000)}
+function pop(el,kind){el.classList.remove('pop-pass','pop-fail');void el.offsetWidth;el.classList.add('pop-'+kind)}
+/* analysis */
+const fmtp=v=>Math.round(v)+'%';
+function lineChart(id,o){const W=560,H=250,L=50,R=14,T=14,B=38,xmin=o.xmin,xmax=o.xmax,ymin=o.ymin,ymax=o.ymax,
+ X=v=>L+(v-xmin)/((xmax-xmin)||1)*(W-L-R),Y=v=>H-B-(v-ymin)/((ymax-ymin)||1)*(H-T-B);let h='';
+ if(o.band)h+=`<rect x="${L}" width="${W-L-R}" y="${Y(o.band[1])}" height="${Y(o.band[0])-Y(o.band[1])}" style="fill:var(--rule)" opacity=".55"/>`;
+ for(const a of o.areas||[])h+=`<polygon points="${[...a.top,...[...a.bottom].reverse()].map(p=>X(p[0]).toFixed(1)+','+Y(p[1]).toFixed(1)).join(' ')}" style="fill:${a.color}" opacity=".75"><title>${a.name}</title></polygon>`;
+ const yt=[0,1,2,3,4].map(i=>ymin+(ymax-ymin)*i/4),yf=o.yfmt||(v=>+v.toFixed(1));
+ for(const t of yt)h+=`<line class="c-grid" x1="${L}" x2="${W-R}" y1="${Y(t)}" y2="${Y(t)}"/><text class="c-t" x="${L-6}" y="${Y(t)+3}" text-anchor="end">${yf(t)}</text>`;
+ const xt=o.xticks||[0,1,2,3,4].map(i=>xmin+(xmax-xmin)*i/4),xf=o.xfmt||(v=>+v.toFixed(1));
+ for(const t of xt)h+=`<text class="c-t" x="${X(t)}" y="${H-B+15}" text-anchor="middle">${xf(t)}</text>`;
+ h+=`<line class="c-ax" x1="${L}" x2="${W-R}" y1="${H-B}" y2="${H-B}"/><line class="c-ax" x1="${L}" x2="${L}" y1="${T}" y2="${H-B}"/>`;
+ for(const l of o.hlines||[])h+=`<line x1="${L}" x2="${W-R}" y1="${Y(l.y)}" y2="${Y(l.y)}" style="stroke:var(--fail)" stroke-dasharray="4 3"/><text class="c-t" x="${W-R}" y="${Y(l.y)-4}" text-anchor="end" style="fill:var(--fail)">${l.label}</text>`;
+ for(const l of o.vlines||[])h+=`<line x1="${X(l.x)}" x2="${X(l.x)}" y1="${T}" y2="${H-B}" style="stroke:var(--fail)" stroke-dasharray="4 3"/><text class="c-t" x="${X(l.x)+4}" y="${T+10}" style="fill:var(--fail)">${l.label}</text>`;
+ for(const s of o.series){if(s.line!==false)h+=`<polyline fill="none" style="stroke:${s.color}" stroke-width="2"${s.dash?' stroke-dasharray="4 3"':''} points="${s.pts.map(p=>X(p[0]).toFixed(1)+','+Y(p[1]).toFixed(1)).join(' ')}"/>`;
+  if(s.dots||s.pts.length<=24)for(const p of s.pts)h+=`<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="${s.pts.length>100?2:3}" style="fill:${p[2]||s.color}"/>`}
+ if(o.xlab)h+=`<text class="c-l" x="${(L+W-R)/2}" y="${H-4}" text-anchor="middle">${o.xlab}</text>`;
+ if(o.ylab)h+=`<text class="c-l" transform="translate(12 ${(T+H-B)/2}) rotate(-90)" text-anchor="middle">${o.ylab}</text>`;
+ (o.areas||[]).forEach((a,i)=>h+=`<text class="c-l" x="${L+10+i*72}" y="${T+10}" style="fill:${a.color}">${a.name}</text>`);
+ if(o.series.length>1)o.series.forEach((s,i)=>h+=`<text class="c-l" x="${L+10+i*72}" y="${H-B-8}" style="fill:${s.color}">${s.name}</text>`);
+ $('#'+id).innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(o.title||'chart')}">${h}</svg>`}
+function barChart(id,o){const W=560,H=250,L=50,R=14,T=14,B=36,n=o.bars.length;
+ if(!n){$('#'+id).innerHTML='<p class="mono" style="color:var(--mute)">Nothing to plot.</p>';return}
+ const ymax=o.ymax||Math.max(1,...o.bars.map(b=>b.v)),bw=(W-L-R)/n,Y=v=>H-B-v/ymax*(H-T-B);let h='';
+ for(let i=0;i<=4;i++){const t=ymax*i/4;h+=`<line class="c-grid" x1="${L}" x2="${W-R}" y1="${Y(t)}" y2="${Y(t)}"/><text class="c-t" x="${L-6}" y="${Y(t)+3}" text-anchor="end">${Math.round(t)}</text>`}
+ o.bars.forEach((b,i)=>{const x=L+i*bw+bw*.12;h+=`<rect x="${x.toFixed(1)}" y="${Y(b.v).toFixed(1)}" width="${(bw*.76).toFixed(1)}" height="${(H-B-Y(b.v)).toFixed(1)}" style="fill:${b.color||'var(--ink)'}"><title>${esc(b.label)}: ${b.v}</title></rect><text class="c-t" x="${(x+bw*.38).toFixed(1)}" y="${H-B+14}" text-anchor="middle">${esc(b.label)}</text>`});
+ if(o.hline)h+=`<line x1="${L}" x2="${W-R}" y1="${Y(o.hline.y)}" y2="${Y(o.hline.y)}" style="stroke:var(--fail)" stroke-dasharray="4 3"/><text class="c-t" x="${W-R}" y="${Y(o.hline.y)-4}" text-anchor="end" style="fill:var(--fail)">${o.hline.label}</text>`;
+ h+=`<line class="c-ax" x1="${L}" x2="${W-R}" y1="${H-B}" y2="${H-B}"/><line class="c-ax" x1="${L}" x2="${L}" y1="${T}" y2="${H-B}"/>`;
+ if(o.ylab)h+=`<text class="c-l" transform="translate(12 ${(T+H-B)/2}) rotate(-90)" text-anchor="middle">${o.ylab}</text>`;
+ $('#'+id).innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(o.title||'chart')}">${h}</svg>`}
+function heat(id,m,mx){const W=560,H=280,L=24,T=22,cw=(W-L-4)/12,ch=(H-T-4)/8;let h='';
+ for(let c=0;c<12;c++)h+=`<text class="c-t" x="${(L+c*cw+cw/2).toFixed(1)}" y="${T-7}" text-anchor="middle">${c+1}</text>`;
+ for(let r=0;r<8;r++){h+=`<text class="c-t" x="${L-7}" y="${(T+r*ch+ch/2+3).toFixed(1)}" text-anchor="end">${ROWS[r]}</text>`;
+  for(let c=0;c<12;c++){const v=m[r][c],q=Math.min(1,v/mx);h+=`<rect x="${(L+c*cw+1).toFixed(1)}" y="${(T+r*ch+1).toFixed(1)}" width="${(cw-2).toFixed(1)}" height="${(ch-2).toFixed(1)}" style="fill:color-mix(in srgb,var(--ink) ${(q*85).toFixed(0)}%,transparent)"><title>${ROWS[r]}${c+1}: ${v.toFixed(1)} µL average</title></rect><text class="c-t" x="${(L+c*cw+cw/2).toFixed(1)}" y="${(T+r*ch+ch/2+3).toFixed(1)}" text-anchor="middle" style="fill:${q>.5?'var(--paper)':'var(--ink)'}">${Math.round(v)}</text>`}}
+ $('#'+id).innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Average volume per well">${h}</svg>`}
+function renderA(){const i=+$('#asel').value,st=i?LIB[i-1][2]:FIXED,r=sim(st,DEF),fr=r.frames,n=fr.length,cols={buffer:'var(--buf)',sample:'var(--sam)',dye:'var(--dye)'};
+ const ser=Object.keys(S0).map(k=>({name:k,color:cols[k],pts:[[0,100],...fr.map((f,j)=>[j+1,f.stock[k]/S0[k]*100])]}));
+ const lo=Math.min(0,...ser.flatMap(s=>s.pts.map(p=>p[1])));
+ lineChart('c1',{title:'Reagent left after each step',series:ser,xmin:0,xmax:Math.max(n,1),ymin:Math.floor(lo/25)*25,ymax:100,yfmt:fmtp,xfmt:v=>Math.round(v),xticks:n<=12?[...Array(n+1).keys()]:null,hlines:[{y:0,label:'empty'}],xlab:'after step',ylab:'% of starting volume'});
+ const last=fr[n-1],ws=Object.entries(last.wells).sort((a,b)=>a[0][0].localeCompare(b[0][0])||(+a[0].slice(1))-(+b[0].slice(1)));
+ barChart('c2',{title:'Liquid in each well',bars:ws.map(([w,o])=>({label:w,v:o.v,color:o.v>DEF.cap?'var(--fail)':`rgb(${o.c.map(x=>Math.round(x/o.v)).join(',')})`})),ymax:Math.max(DEF.cap*1.15,...ws.map(x=>x[1].v*1.05)),hline:{y:DEF.cap,label:'well limit'},ylab:'µL'});
+ const vmax=Math.max(320,...fr.map(f=>f.v*1.1));
+ lineChart('c3',{title:'Transfer sizes',series:[{color:'var(--ink)',line:false,dots:true,pts:fr.map((f,j)=>[j+1,f.v,(f.v<DEF.pmin||f.v>DEF.pmax)?'var(--fail)':'var(--ink)'])}],xmin:0,xmax:n+1,ymin:0,ymax:vmax,band:[DEF.pmin,DEF.pmax],yfmt:v=>Math.round(v),xfmt:v=>Math.round(v),xticks:n<=12?[...Array(n).keys()].map(x=>x+1):null,xlab:'step',ylab:'µL'})}
+function renderB(){const n=+$('#ansel').value||300,seed=+$('#aseed').value||7,rnd=prng(seed),bases=[];for(let i=0;i<n;i++)bases.push(genProto(rnd));
+ const m=ROWS.split('').map(()=>Array(12).fill(0)),bins=Array(6).fill(0);
+ for(const b of bases)for(const [,,w,v] of b){m[ROWS.indexOf(w[0])][+w.slice(1)-1]+=v/n;bins[Math.min(5,Math.floor((v-20)/20))]++}
+ heat('c4',m,Math.max(...m.flat()));
+ barChart('c5',{title:'Transfer sizes',bars:bins.map((c,i)=>({label:i===5?'120':`${20+i*20}–${39+i*20}`,v:c})),ylab:'transfers'});
+ const caps=[],pm=[1,5,10,15,20,21,25,30,40,50,60];for(let c=60;c<=300;c+=20)caps.push(c);
+ const flag=(cfg,code)=>100*bases.filter(b=>codesOf(b,{...GCFG,...cfg}).includes(code)).length/n;
+ lineChart('c6',{title:'Flagged vs well limit',series:[{color:'var(--ink)',pts:caps.map(c=>[c,flag({cap:c},'WELL_OVERFLOW')])}],xmin:60,xmax:300,ymin:0,ymax:100,yfmt:fmtp,xfmt:v=>Math.round(v),xticks:caps.filter((c,i)=>i%2===0),vlines:[{x:200,label:'built for 200'}],xlab:'well limit (µL)',ylab:'protocols flagged'});
+ lineChart('c7',{title:'Flagged vs pipette minimum',series:[{color:'var(--ink)',pts:pm.map(c=>[c,flag({pmin:c},'PIPETTE_RANGE')])}],xmin:0,xmax:60,ymin:0,ymax:100,yfmt:fmtp,xfmt:v=>Math.round(v),xticks:[0,10,20,30,40,50,60],vlines:[{x:20,label:'built for 20'}],xlab:'pipette minimum (µL)',ylab:'protocols flagged'})}
+function renderT(){const sizes=[100,300,1000,3000,10000,30000],cfgT={stock:{buffer:1e15},dead:0,pmin:1,pmax:1e9,cap:1e15,rows:'ABCDEFGH',cols:12,ctrl:{},nosnap:true};
+ const pts=sizes.map(n=>{const st=[...Array(n)].map((_,i)=>[i+1,'buffer',ALLW[i%96],20]),ts=[];for(let q=0;q<3;q++){const t0=performance.now();sim(st,cfgT);ts.push(performance.now()-t0)}ts.sort((a,b)=>a-b);return[n,ts[1]]});
+ const e=pts[pts.length-1];
+ lineChart('c8',{title:'Checking time',series:[{color:'var(--ink)',pts}],xmin:0,xmax:30000,ymin:0,ymax:Math.max(1,e[1]*1.1),yfmt:v=>v.toFixed(v<10?1:0),xfmt:v=>v?(v/1000)+'k':'0',xlab:'steps in the protocol',ylab:'milliseconds'});
+ $('#tsum').textContent=`${e[0].toLocaleString()} steps took ${e[1].toFixed(1)} ms, about ${(e[1]/e[0]*1000).toFixed(2)} µs per step. Timed in this browser, so it depends on your machine.`}
+const colsR={buffer:'var(--buf)',sample:'var(--sam)',dye:'var(--dye)'},rgbOf=o=>`rgb(${o.c.map(x=>Math.round(x/o.v)).join(',')})`;
+const bset=(n,seed)=>{const rnd=prng(seed),b=[];for(let i=0;i<n;i++)b.push(genProto(rnd));return b};
+function svgOut(id,W,H,h,label){$('#'+id).innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">${h}</svg>`}
+function boxPlot(id,gs,o){const W=560,H=250,L=50,R=14,T=14,B=36,n=gs.length,bw=(W-L-R)/n,Y=v=>H-B-v/o.ymax*(H-T-B);let h='';
+ for(let i=0;i<=4;i++){const t=o.ymax*i/4;h+=`<line class="c-grid" x1="${L}" x2="${W-R}" y1="${Y(t)}" y2="${Y(t)}"/><text class="c-t" x="${L-6}" y="${Y(t)+3}" text-anchor="end">${Math.round(t)}</text>`}
+ gs.forEach((g,i)=>{const v=[...g.vals].sort((a,b)=>a-b),q=p=>v[Math.floor(p*(v.length-1))],cx=L+i*bw+bw/2,x=cx-bw*.22,w=bw*.44;
+  h+=`<line x1="${cx}" x2="${cx}" y1="${Y(q(.9))}" y2="${Y(q(.1))}" style="stroke:var(--ink)"/><rect x="${x}" y="${Y(q(.75))}" width="${w}" height="${Math.max(1,Y(q(.25))-Y(q(.75)))}" style="fill:${g.color}" opacity=".8"/><line x1="${x}" x2="${x+w}" y1="${Y(q(.5))}" y2="${Y(q(.5))}" style="stroke:var(--ink)" stroke-width="2"/><text class="c-t" x="${cx}" y="${H-B+14}" text-anchor="middle">${g.label}</text>`});
+ h+=`<line class="c-ax" x1="${L}" x2="${W-R}" y1="${H-B}" y2="${H-B}"/><line class="c-ax" x1="${L}" x2="${L}" y1="${T}" y2="${H-B}"/><text class="c-l" transform="translate(12 ${(T+H-B)/2}) rotate(-90)" text-anchor="middle">${o.ylab}</text>`;
+ svgOut(id,W,H,h,'Box plot')}
+function dotPlot(id,rows){const W=560,rh=30,L=130,R=20,T=8,H=rows.length*rh+T+34,X=v=>L+v/100*(W-L-R);let h='';
+ for(const t of [0,25,50,75,100])h+=`<line class="c-grid" x1="${X(t)}" x2="${X(t)}" y1="${T}" y2="${H-26}"/><text class="c-t" x="${X(t)}" y="${H-12}" text-anchor="middle">${t}%</text>`;
+ rows.forEach((r,i)=>{const y=T+i*rh+rh/2;h+=`<text class="c-t" x="${L-8}" y="${y+3}" text-anchor="end">${r.label}</text><line x1="${X(r.lo)}" x2="${X(r.hi)}" y1="${y}" y2="${y}" style="stroke:${r.color}" stroke-width="2"/><circle cx="${X(r.v)}" cy="${y}" r="4.5" style="fill:${r.color}"><title>${esc(r.label)}: ${r.v.toFixed(1)}%</title></circle>`});
+ svgOut(id,W,H,h,'Detection rates')}
+function grid(id,o){const W=560,L=o.L||78,T=30,cw=(W-L-6)/o.cl.length,ch=o.ch||32,H=T+ch*o.rl.length+(o.xlab?22:6);let h='';
+ o.cl.forEach((c,j)=>h+=`<text class="c-t" x="${(L+j*cw+cw/2).toFixed(1)}" y="${T-9}" text-anchor="middle">${c}</text>`);
+ o.rl.forEach((r,i)=>{h+=`<text class="c-t" x="${L-7}" y="${T+i*ch+ch/2+3}" text-anchor="end">${r}</text>`;
+  o.cl.forEach((c,j)=>{const v=o.vals[i][j],q=Math.min(1,v/o.max),mk=o.mark&&o.mark[0]===i&&o.mark[1]===j;
+   h+=`<rect x="${(L+j*cw+1).toFixed(1)}" y="${T+i*ch+1}" width="${(cw-2).toFixed(1)}" height="${ch-2}" style="fill:color-mix(in srgb,var(--ink) ${(q*85).toFixed(0)}%,transparent)"${mk?' stroke="var(--fail)" stroke-width="2"':''}><title>${esc(r)} / ${esc(c)}: ${v.toFixed(1)}</title></rect><text class="c-t" x="${(L+j*cw+cw/2).toFixed(1)}" y="${T+i*ch+ch/2+3}" text-anchor="middle" style="fill:${q>.5?'var(--paper)':'var(--ink)'}">${o.fmt?o.fmt(v):Math.round(v)}</text>`})});
+ if(o.xlab)h+=`<text class="c-l" x="${(L+W)/2}" y="${H-4}" text-anchor="middle">${o.xlab}</text>`;
+ if(o.ylab)h+=`<text class="c-l" transform="translate(10 ${(T+H)/2}) rotate(-90)" text-anchor="middle">${o.ylab}</text>`;
+ svgOut(id,W,H,h,'Grid')}
+function renderFlow(fr){const W=560,H=270,LX=84,RX=W-84,nw=10,rs=Object.keys(S0),link={};let total=0;
+ const wo=[...new Set(fr.filter(f=>f.valid).map(f=>f.w))].sort((a,b)=>a[0].localeCompare(b[0])||(+a.slice(1))-(+b.slice(1)));
+ for(const f of fr)if(f.valid){const k=f.r+'|'+f.w;link[k]=(link[k]||0)+f.v;total+=f.v}
+ if(!total){$('#c9').innerHTML='<p class="mono" style="color:var(--mute)">Nothing to plot.</p>';return}
+ const gap=wo.length>8?4:8,sc=(H-20-gap*(Math.max(wo.length,rs.length)-1))/total,ry={},rt={},wy={},wt={};let y=10;
+ for(const r of rs){rt[r]=wo.reduce((a,w)=>a+(link[r+'|'+w]||0),0);ry[r]=y;y+=rt[r]*sc+(rt[r]?gap:0)}
+ y=10;for(const w of wo){wt[w]=rs.reduce((a,r)=>a+(link[r+'|'+w]||0),0);wy[w]=y;y+=wt[w]*sc+gap}
+ const lo={...ry},ro={...wy},xm=(LX+nw+RX)/2;let h='';
+ for(const r of rs)for(const w of wo){const v=link[r+'|'+w];if(!v)continue;const hh=v*sc,y0=lo[r],y1=ro[w];lo[r]+=hh;ro[w]+=hh;
+  h+=`<path d="M${LX+nw},${y0.toFixed(1)} C${xm},${y0.toFixed(1)} ${xm},${y1.toFixed(1)} ${RX},${y1.toFixed(1)} L${RX},${(y1+hh).toFixed(1)} C${xm},${(y1+hh).toFixed(1)} ${xm},${(y0+hh).toFixed(1)} ${LX+nw},${(y0+hh).toFixed(1)} Z" style="fill:${colsR[r]}" opacity=".55"><title>${r} → ${w}: ${v} µL</title></path>`}
+ for(const r of rs)if(rt[r])h+=`<rect x="${LX}" y="${ry[r].toFixed(1)}" width="${nw}" height="${(rt[r]*sc).toFixed(1)}" style="fill:${colsR[r]}"/><text class="c-t" x="${LX-6}" y="${(ry[r]+rt[r]*sc/2+3).toFixed(1)}" text-anchor="end">${r} ${rt[r]}</text>`;
+ for(const w of wo)h+=`<rect x="${RX}" y="${wy[w].toFixed(1)}" width="${nw}" height="${(wt[w]*sc).toFixed(1)}" style="fill:var(--ink)"/><text class="c-t" x="${RX+nw+5}" y="${(wy[w]+wt[w]*sc/2+3).toFixed(1)}">${w} ${wt[w]}</text>`;
+ svgOut('c9',W,H,h,'Flow from reagents to wells')}
+function renderFilm(fr){const n=fr.length,cols=4,tw=126,cell=tw/12,th=22+8*cell,rowsN=Math.ceil(n/cols),H=rowsN*(th+10)+4;let h='';
+ fr.forEach((f,j)=>{const ox=(j%cols)*(tw+14)+6,oy=Math.floor(j/cols)*(th+10)+2,bad=f.errs.length>0;
+  h+=`<text class="c-t" x="${ox}" y="${oy+10}" style="fill:${bad?'var(--fail)':'var(--mute)'}">${f.i}: ${f.r} → ${esc(f.w)} ${f.v}</text>`;
+  for(let r=0;r<8;r++)for(let c=0;c<12;c++){const o=f.wells[ROWS[r]+(c+1)],cx=(ox+c*cell+cell/2).toFixed(1),cy=(oy+22+r*cell+cell/2).toFixed(1);
+   h+=o?`<circle cx="${cx}" cy="${cy}" r="${(cell*.42*Math.sqrt(Math.min(1,o.v/DEF.cap))+1).toFixed(1)}" style="fill:${o.v>DEF.cap?'var(--fail)':rgbOf(o)}"/>`:`<circle cx="${cx}" cy="${cy}" r="1.4" style="fill:var(--rule)"/>`}
+  if(f.valid){const m=wxy(f.w);h+=`<circle cx="${(ox+m.ci*cell+cell/2).toFixed(1)}" cy="${(oy+22+m.ri*cell+cell/2).toFixed(1)}" r="${(cell*.5).toFixed(1)}" fill="none" style="stroke:${bad?'var(--fail)':'var(--ink)'}" stroke-width="1.2"/>`}
+  else h+=`<text class="c-t" x="${ox+tw}" y="${oy+10}" text-anchor="end" style="fill:var(--fail)">✕</text>`});
+ svgOut('c10',560,H,h,'Plate after each step')}
+function renderCum(fr){const n=fr.length,rs=Object.keys(S0),cum=[{buffer:0,sample:0,dye:0}];
+ for(const f of fr){const c={...cum[cum.length-1]};c[f.r]=(c[f.r]||0)+f.v;cum.push(c)}
+ const areas=[];let lower=cum.map(()=>0);
+ for(const r of rs){const upper=cum.map((c,j)=>lower[j]+(c[r]||0));areas.push({name:r,color:colsR[r],top:upper.map((v,j)=>[j,v]),bottom:lower.map((v,j)=>[j,v])});lower=upper}
+ lineChart('c11',{title:'Liquid moved so far',series:[],areas,xmin:0,xmax:Math.max(n,1),ymin:0,ymax:Math.max(1,lower[n]*1.05),yfmt:v=>Math.round(v),xfmt:v=>Math.round(v),xticks:n<=12?[...Array(n+1).keys()]:null,xlab:'after step',ylab:'µL moved'})}
+function renderProb(r){const bars=r.frames.map(f=>({label:String(f.i),v:f.errs.length,color:f.errs.length?'var(--fail)':'var(--rule)'}));
+ bars.push({label:'end',v:r.miss.length,color:r.miss.length?'var(--fail)':'var(--rule)'});barChart('c12',{title:'Problems per step',bars,ymax:4,ylab:'problems'})}
+function renderA2(){const i=+$('#asel').value,st=i?LIB[i-1][2]:FIXED,r=sim(st,DEF);renderFlow(r.frames);renderFilm(r.frames);renderCum(r.frames);renderProb(r)}
+function renderC(){const n=+$('#ansel').value||300,seed=+$('#aseed').value||7,bases=bset(n,seed),rnd=prng(seed+7);
+ const rowT=Array(8).fill(0),colT=Array(12).fill(0),sizes={},pts=[],use={buffer:[],sample:[],dye:[]};
+ for(const b of bases){const u={buffer:0,sample:0,dye:0};let tot=0;for(const [,r,w,v] of b){rowT[ROWS.indexOf(w[0])]+=v/n;colT[+w.slice(1)-1]+=v/n;u[r]+=v;tot+=v}
+  sizes[b.length]=(sizes[b.length]||0)+1;pts.push([b.length+(rnd()-.5)*.7,tot]);for(const r in u)use[r].push(100*u[r]/GCFG.stock[r])}
+ barChart('c13',{title:'Liquid per row',bars:ROWS.split('').map((l,i)=>({label:l,v:Math.round(rowT[i])})),ylab:'µL per protocol'});
+ barChart('c14',{title:'Liquid per column',bars:colT.map((v,i)=>({label:String(i+1),v:Math.round(v)})),ylab:'µL per protocol'});
+ barChart('c15',{title:'Steps per protocol',bars:[...Array(17)].map((_,i)=>({label:String(8+i),v:sizes[8+i]||0})),ylab:'protocols'});
+ lineChart('c16',{title:'Steps against liquid moved',series:[{color:'var(--ink)',line:false,dots:true,pts}],xmin:7,xmax:25,ymin:0,ymax:Math.max(...pts.map(p=>p[1]))*1.08,yfmt:v=>Math.round(v),xfmt:v=>Math.round(v),xticks:[8,12,16,20,24],xlab:'steps',ylab:'µL moved'});
+ boxPlot('c17',Object.keys(use).map(r=>({label:r,color:colsR[r],vals:use[r]})),{ymax:100,ylab:'% of stock used'})}
+function renderD(){const n=+$('#ansel').value||300,seed=+$('#aseed').value||7,b=bench2(n,seed),bases=bset(n,seed),rnd=prng(seed+101),order=['CONTROL_MISSING','PIPETTE_RANGE','WELL_OVERFLOW','WELL_MISSING','REAGENT_EMPTY'];
+ const ci=(c,m)=>wilson(c,m).map(x=>x*100);
+ dotPlot('c18',b.single.map(r=>{const [lo,hi]=ci(r.hit,r.n);return{label:r.t,v:100*r.hit/r.n,lo,hi,color:r.scope?'var(--ink)':'var(--fail)'}}));
+ const runK=(base,k)=>{const ch=[...order].sort(()=>rnd()-.5).slice(0,k).sort((x,y)=>order.indexOf(x)-order.indexOf(y));let st=base,cfg=GCFG;const tk=new Set();for(const t of ch){const r=inject(t,st,cfg,rnd,tk);st=r.steps;cfg=r.cfg}const cl=codesOf(st,cfg);return{ch,cl,cs:new Set(cl)}};
+ const kp=[],lo=[],hi=[],vc={},co=SCOPE.map(()=>Array(5).fill(0));
+ for(let k=1;k<=5;k++){let hit=0;for(const base of bases){const r=runK(base,k);if(r.ch.every(t=>r.cs.has(t)))hit++;
+   if(k===3){vc[r.cl.length]=(vc[r.cl.length]||0)+1;SCOPE.forEach((a,i)=>SCOPE.forEach((c,j)=>{if(r.cs.has(a)&&r.cs.has(c))co[i][j]++}))}}
+  const [l,h]=ci(hit,n);kp.push([k,100*hit/n]);lo.push([k,l]);hi.push([k,h])}
+ lineChart('c19',{title:'Detection against number of errors',series:[{name:'all found',color:'var(--ink)',pts:kp},{name:'',color:'var(--mute)',dash:true,pts:lo},{name:'',color:'var(--mute)',dash:true,pts:hi}],xmin:1,xmax:5,ymin:0,ymax:100,yfmt:fmtp,xfmt:v=>Math.round(v),xticks:[1,2,3,4,5],xlab:'errors injected at once',ylab:'all found'});
+ const ks=Object.keys(vc).map(Number).sort((a,b)=>a-b);
+ barChart('c20',{title:'Problems reported',bars:ks.map(k=>({label:String(k),v:vc[k]})),ylab:'protocols'});
+ const pos=Array(10).fill(0);
+ for(const t of ['PIPETTE_RANGE','WELL_OVERFLOW','WELL_MISSING','REAGENT_EMPTY'])for(const base of bases){const r=inject(t,base,GCFG,rnd,new Set()),fr=sim(r.steps,r.cfg).frames,i=fr.findIndex(f=>f.errs.length);if(i>=0)pos[Math.min(9,Math.floor(i/fr.length*10))]++}
+ barChart('c21',{title:'Where the first problem appears',bars:pos.map((v,i)=>({label:`${i*10}%`,v})),ylab:'errors'});
+ const sh=['PIPETTE','REAGENT','OVERFLOW','MISSING','CONTROL'];
+ grid('c22',{rl:sh,cl:sh,vals:SCOPE.map((_,i)=>SCOPE.map((_,j)=>co[i][j])),max:n,ch:34})}
+function renderE(){const n=+$('#ansel').value||300,seed=+$('#aseed').value||7,bases=bset(n,seed),caps=[60,100,140,180,200,240,300],mins=[1,10,20,21,30,40,60];
+ const vals=caps.map(c=>mins.map(m=>100*bases.filter(b=>{const cs=codesOf(b,{...GCFG,cap:c,pmin:m});return cs.includes('WELL_OVERFLOW')||cs.includes('PIPETTE_RANGE')}).length/n));
+ grid('c23',{rl:caps.map(c=>c+' µL'),cl:mins.map(m=>m+' µL'),vals,max:100,fmt:v=>Math.round(v)+'%',mark:[4,2],xlab:'pipette minimum',ylab:'well limit'});
+ const stocks=[100,200,300,400,600,800,1000,1500];
+ lineChart('c24',{title:'Flagged against tube volume',series:Object.keys(GCFG.stock).map(r=>({name:r,color:colsR[r],pts:stocks.map(s=>[s,100*bases.filter(b=>codesOf(b,{...GCFG,stock:{...GCFG.stock,[r]:s}}).includes('REAGENT_EMPTY')).length/n])})),xmin:100,xmax:1500,ymin:0,ymax:100,yfmt:fmtp,xfmt:v=>Math.round(v),xticks:[100,400,800,1200,1500],xlab:'starting volume of that tube (µL)',ylab:'protocols flagged'})}
+function renderAnalysis(){const sel=$('#asel');if(!sel.innerHTML)sel.innerHTML=['Example protocol',...LIB.map(l=>l[0])].map((n,i)=>`<option value="${i}">${n}</option>`).join('');
+ const pa=()=>{renderA();renderA2()},gen=()=>{setTimeout(renderB,0);setTimeout(renderC,15);setTimeout(renderD,30);setTimeout(renderE,45)};
+ sel.onchange=pa;$('#ago').onclick=gen;$('#atime').onclick=renderT;pa();gen();setTimeout(renderT,60)}
+
+/* navigation */
+function go(id){
+ $$('section[data-p]').forEach(s=>s.classList.toggle('on',s.dataset.p===id));
+ $$('#nav button').forEach(b=>b.dataset.go===id?b.setAttribute('aria-current','page'):b.removeAttribute('aria-current'));
+ if(id==='results')runBench();if(id==='build')drawBuilder();if(id==='validate'&&$('#vout').textContent.startsWith('Results appear'))vrun();
+ if(id==='data')renderLib();if(id==='analysis')renderAnalysis();
+ window.scrollTo(0,0)}
+$$('[data-go]').forEach(e=>e.addEventListener('click',ev=>{ev.preventDefault();go(e.dataset.go)}));
+draw();go('home');
+</script></body></html>
