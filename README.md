@@ -2,7 +2,7 @@
 
 A static checker for liquid-handling protocols. It simulates a protocol in software before the robot runs it, tracking liquid in every tube and well and listing steps that can't work as written.
 
-Live site: single-page app in `index.html` (no build step, no dependencies — just open it or serve it statically).
+Live site: `index.html` plus `js/` (checker, charts, page wiring) and `data/` (sample, real and history protocols). No build step, no dependencies — just open `index.html` or serve the folder statically.
 
 ## What it checks
 
