@@ -78,7 +78,7 @@ select{font:13px var(--mono);padding:5px 8px;border:1px solid var(--ink);backgro
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style></head><body>
 <header><div class="wide"><nav><button class="brand" data-go="home">LabCheck</button>
-<div class="links" id="nav"><button data-go="home">Notes</button><button data-go="build">Build</button><button data-go="validate">Try it</button><button data-go="data">Data</button><button data-go="analysis">Analysis</button><button data-go="method">Method</button><button data-go="results">Results</button><button data-go="report">Report</button><button data-go="glossary">Glossary</button></div></nav></div></header>
+<div class="links" id="nav"><button data-go="home">Notes</button><button data-go="build">Build</button><button data-go="validate">Try it</button><button data-go="data">Data</button><button data-go="analysis">Analysis</button><button data-go="atlas">Atlas</button><button data-go="method">Method</button><button data-go="results">Results</button><button data-go="report">Report</button><button data-go="glossary">Glossary</button></div></nav></div></header>
 
 <section data-p="home">
 <div class="col">
@@ -184,6 +184,23 @@ steps:
 <p>Error injection: start from valid generated protocols, inject one known mistake per protocol, measure whether the corresponding rule fires. Two injection types (WRONG_REAGENT, WRONG_WELL) have no dedicated rule—any detection is incidental.</p>
 <p>Benchmark generation: 8–24 steps, 3 reagents (buffer 4000µL, sample 800µL, dye 400µL), random well/reagent/volume respecting all constraints.</p>
 <p>Metrics: detection rate per error type (Wilson 95% CI), multi-error detection (all injected codes reported), false alarm rate on clean protocols, timing.</p>
+
+<h2>Statistical methods</h2>
+<p>Rates are binomial proportions (caught / n). Intervals are Wilson score intervals at 95% (z = 1.96):</p>
+<pre>(p + z²/2n ± z·√(p(1−p)/n + z²/4n²)) / (1 + z²/n)</pre>
+<p>I use Wilson rather than the textbook Wald interval (p ± z·√(p(1−p)/n)) because Wald collapses to zero width at 0% and 100% — exactly where most of these rates sit — and under-covers near the edges. Wilson holds ~95% coverage across the range. No p-values are reported; with n = 300 the intervals speak for themselves.</p>
+<p>Reproducibility: base protocols come from one pseudorandom stream; each injected fault type draws from its own independent stream derived from the seed. Same seed and count replay the same tables bit-for-bit. The Atlas page re-runs five seeds to show the numbers do not depend on a lucky draw.</p>
+
+<h2>Complexity</h2>
+<p>Checking is linear: each step does constant work (update two counters, test six rules), so time is O(S) in the number of steps and memory is O(W) in filled wells plus O(R) reagent stocks. The full cost table is on the <a href="#" data-go="atlas">atlas page</a>. Timing uses the median of repeated runs to resist garbage-collection pauses.</p>
+
+<h2>Threats to validity</h2>
+<ul class="plain">
+<li><b>Generator realism.</b> Protocols are uniform-random subject to constraints, not lab-like: no dilution series, no replicates layout, no plate-edge avoidance. Rates measure code correctness, not field performance.</li>
+<li><b>Fault realism.</b> Faults are synthesised by someone who knows the rules. A mistyped well that lands on another valid well (no rule) is under-represented relative to real typos.</li>
+<li><b>Single-fault bias.</b> Real protocols can carry several faults; multi-error runs are covered but only up to five, all of distinct types.</li>
+<li><b>Oracle problem.</b> There is no independent oracle: the generator guarantees validity by construction, so "false alarms on clean protocols" tests the generator as much as the checker.</li>
+<li><b>Browser timing.</b> Millisecond timings depend on the machine and tab state; treat them as order-of-magnitude.</li></ul>
 
 <h2>What it will not catch</h2>
 <p>It knows nothing about viscosity, evaporation, collisions on the deck, timing, or whether the experiment makes sense biologically. A pass only means the protocol agrees with itself. The assay could still fail.</p>
@@ -351,6 +368,16 @@ steps:
 <dt>Protocol</dt><dd>The ordered list of steps an experiment follows: what to move, how much, and where.</dd>
 <dt>Reservoir</dt><dd>A trough holding a bulk reagent that the pipette draws from.</dd>
 <dt>Well</dt><dd>One small cup in a plate, named by row and column, such as B3.</dd>
+<dt>Boundary test</dt><dd>A protocol sitting exactly on a limit (20 µL, 200 µL, stock exactly spent). Must pass; one unit beyond must fail.</dd>
+<dt>Calibration</dt><dd>Checking that a measurement tool reads correctly at known values. Here: the checker at known protocol limits.</dd>
+<dt>Confidence interval</dt><dd>A range that plausibly contains the true rate. All intervals here are Wilson 95% intervals.</dd>
+<dt>Coverage</dt><dd>How often a confidence interval contains the truth over repeats. Wilson intervals hold ~95% coverage; the simpler Wald interval does not at extreme rates.</dd>
+<dt>Incidental detection</dt><dd>A fault with no dedicated rule that still gets flagged because it causes a different rule to fire.</dd>
+<dt>Jaccard index</dt><dd>Overlap of two sets divided by their union. Used for protocol similarity on step tuples.</dd>
+<dt>Median of runs</dt><dd>The middle timing of repeated runs, robust to one slow run from garbage collection or tab throttling.</dd>
+<dt>Must-pass case</dt><dd>A protocol variant exactly on the allowed side of a limit. Any report on it is a false alarm by construction.</dd>
+<dt>Seed</dt><dd>The starting number of a pseudorandom generator. Same seed replays the same protocols and faults.</dd>
+<dt>Specificity</dt><dd>Share of clean or must-pass cases correctly left unflagged. The complement of the false alarm rate.</dd>
 <dt>µL</dt><dd>Microlitre, a millionth of a litre.</dd></dl>
 </div></section>
 
@@ -451,6 +478,99 @@ steps:
 <p>Time to check one protocol of a given length. The test protocol has no errors, so this measures the bookkeeping and not the error reporting.</p>
 <div class="charts"><figure><div id="c8"></div><figcaption id="tsum"></figcaption></figure></div>
 <div class="row" style="margin-top:10px"><button class="b" id="atime">Time it again</button></div>
+</div></section>
+
+<section data-p="atlas"><div class="wide">
+<div class="col" style="margin:0;padding:0"><h1>Atlas</h1>
+<p class="sub">Every chart and table in one place. <span id="atlasCount" class="mono" style="color:var(--mute)"></span></p>
+<p>Same generator and checker as the Results page. Change the seed or count and press Recompute; every figure below rebuilds from the new set.</p></div>
+<div class="row" style="margin:6px 0 0"><label class="mono">seed <input id="tseed" type="number" value="7"></label><label class="mono">protocols <select id="tsel"><option>50</option><option selected>100</option><option>200</option></select></label><button class="b" id="tgo">Recompute</button></div>
+
+<h2>Volumes</h2>
+<p>What transfers look like in valid protocols: per-reagent sizes, controls, plate position, reuse, and how close wells get to the limit.</p>
+<div class="charts">
+<figure><div id="c33"></div><figcaption>Buffer transfer sizes (µL).</figcaption></figure>
+<figure><div id="c34"></div><figcaption>Sample transfer sizes (µL).</figcaption></figure>
+<figure><div id="c35"></div><figcaption>Dye transfer sizes (µL).</figcaption></figure>
+<figure><div id="c36"></div><figcaption>Volume dispensed into control wells vs regular wells.</figcaption></figure>
+<figure><div id="c37"></div><figcaption>How many times the average well is dosed: once, twice, three or more.</figcaption></figure>
+<figure><div id="c38"></div><figcaption>Fullest well per protocol, as % of the 200 µL limit.</figcaption></figure></div>
+
+<h2>Stability</h2>
+<p>Do the headline numbers survive a change of seed or sample size? Five independent seeds, three sample sizes, and clean-vs-injected report counts.</p>
+<div class="charts">
+<figure><div id="c39"></div><figcaption>Detection rate per rule across 5 seeds (n=100 each). Thin lines are 95% intervals.</figcaption></figure>
+<figure><div id="c40"></div><figcaption>Detection rate vs number of protocols, per rule.</figcaption></figure>
+<figure><div id="c41"></div><figcaption>False alarms on clean protocols vs set size.</figcaption></figure>
+<figure><div id="c42"></div><figcaption>With k errors injected: share where at least one vs every error is found.</figcaption></figure>
+<figure><div id="c43"></div><figcaption>Problems reported per run: clean protocols vs 3 errors injected.</figcaption></figure>
+<figure><div id="c44"></div><figcaption>Check time vs protocol length (median of 5 runs per size).</figcaption></figure></div>
+
+<h2>Boundaries</h2>
+<p>Limits are where checkers earn trust. Each boundary is tested from both sides: just inside must pass, just outside must fail.</p>
+<div class="charts">
+<figure><div id="c45"></div><figcaption>Flag rate as pipette minimum moves 1–60 µL (built for 20).</figcaption></figure>
+<figure><div id="c46"></div><figcaption>Flag rate as well limit moves 60–300 µL (built for 200).</figcaption></figure>
+<figure><div id="c47"></div><figcaption>Flag rate as dead volume moves 0–100 µL with a 50 µL tube remainder.</figcaption></figure>
+<figure><div id="c48"></div><figcaption>Single 50 µL step tested at volumes 15–25 µL: only 19 and below fail.</figcaption></figure>
+<figure><div id="c49"></div><figcaption>Single well filled to 190–210 µL in 5 µL steps: only above 200 fails.</figcaption></figure>
+<figure><div id="c50"></div><figcaption>Tube of 120 µL drawn down 100–130 µL: only above 120 fails.</figcaption></figure></div>
+
+<h2>Patterns</h2>
+<p>Where errors surface and which codes travel together, beyond the Analysis page.</p>
+<div class="charts">
+<figure><div id="c51"></div><figcaption>Row-normalised confusion: given the injected error (row), what share of runs reported each code.</figcaption></figure>
+<figure><div id="c52"></div><figcaption>Median step of first report, per error type (as % into the protocol).</figcaption></figure>
+<figure><div id="c53"></div><figcaption>Reports per run with 2 errors injected.</figcaption></figure>
+<figure><div id="c54"></div><figcaption>Pairwise protocol similarity (Jaccard) distribution, 50 protocols.</figcaption></figure>
+<figure><div id="c55"></div><figcaption>Buffer vs sample moved per protocol (each dot one protocol).</figcaption></figure>
+<figure><div id="c56"></div><figcaption>Steps vs wells used per protocol.</figcaption></figure></div>
+
+<h2>Error taxonomy</h2>
+<p>Fifteen fault variants, each injected into 100 valid protocols. Rows marked <b>must-pass</b> sit exactly on the allowed side of a boundary: any report there is a false alarm by construction.</p>
+<div class="tw"><table><thead><tr><th>#</th><th>Variant</th><th>What changes</th><th>Expect</th><th class="num">n</th><th class="num">Flagged</th><th class="num">Rate</th></tr></thead><tbody id="tE"></tbody></table></div>
+<div class="charts">
+<figure><div id="c57"></div><figcaption>Flag rate per taxonomy variant. Amber rows are must-pass boundaries and should sit at zero.</figcaption></figure>
+<figure><div id="c58"></div><figcaption>Boundary variants only: fail-side vs pass-side rates.</figcaption></figure>
+<figure><div id="c59"></div><figcaption>Incidental detection: duplicated step and swapped wells have no dedicated rule.</figcaption></figure>
+<figure><div id="c60"></div><figcaption>Which codes fire for faults with no single expected code (huge volume, duplicate, swap).</figcaption></figure></div>
+
+<h2>Reagents</h2>
+<p>Stock usage and depletion risk per reagent.</p>
+<div class="charts">
+<figure><div id="c61"></div><figcaption>Share of buffer stock used per protocol.</figcaption></figure>
+<figure><div id="c62"></div><figcaption>Share of sample stock used per protocol.</figcaption></figure>
+<figure><div id="c63"></div><figcaption>Share of dye stock used per protocol.</figcaption></figure>
+<figure><div id="c64"></div><figcaption>Flag rate if the buffer tube started with 500–4000 µL.</figcaption></figure>
+<figure><div id="c65"></div><figcaption>Flag rate if the sample tube started with 100–800 µL.</figcaption></figure>
+<figure><div id="c66"></div><figcaption>Flag rate if the dye tube started with 50–400 µL.</figcaption></figure></div>
+
+<h2>Wells</h2>
+<p>Where liquid lands on the plate.</p>
+<div class="charts">
+<figure><div id="c67"></div><figcaption>Corner vs edge vs centre wells: average µL per protocol.</figcaption></figure>
+<figure><div id="c68"></div><figcaption>Wells used per protocol.</figcaption></figure>
+<figure><div id="c69"></div><figcaption>Wells receiving more than one dose per protocol.</figcaption></figure>
+<figure><div id="c70"></div><figcaption>Wells within 10% of the limit per protocol.</figcaption></figure>
+<figure><div id="c71"></div><figcaption>Unused wells per protocol (of 96).</figcaption></figure>
+<figure><div id="c72"></div><figcaption>Average µL by dose count: wells dosed 1×, 2×, 3× or more.</figcaption></figure></div>
+
+<h2>Methods</h2>
+<p>How the checker is built and what each figure assumes. Seed stability across 5 seeds:</p>
+<div class="tw"><table><thead><tr><th>Seed</th><th class="num">n</th><th class="num">Mean steps</th><th class="num">Mean µL</th><th class="num">False alarms</th></tr></thead><tbody id="tF"></tbody></table></div>
+<p>Asymptotic cost (S steps, W filled wells, R rules):</p>
+<div class="tw"><table><thead><tr><th>Stage</th><th>Time</th><th>Space</th><th>Notes</th></tr></thead><tbody id="tG"></tbody></table></div>
+<p>Defaults and where they come from:</p>
+<div class="tw"><table><thead><tr><th>Parameter</th><th>Default</th><th>Source</th></tr></thead><tbody id="tH"></tbody></table></div>
+<div class="charts">
+<figure><div id="c73"></div><figcaption>Rule evaluation order inside one step: first failure reported, all failures recorded.</figcaption></figure>
+<figure><div id="c74"></div><figcaption>Simulator state after each step: two counters per source and well.</figcaption></figure>
+<figure><div id="c75"></div><figcaption>Time per step stays flat as protocols grow (µs per step).</figcaption></figure>
+<figure><div id="c76"></div><figcaption>Reports grow with injected errors; clean runs stay near zero.</figcaption></figure>
+<figure><div id="c77"></div><figcaption>Detection by volume distance outside the pipette range.</figcaption></figure>
+<figure><div id="c78"></div><figcaption>Overflow reports by µL over the limit.</figcaption></figure>
+<figure><div id="c79"></div><figcaption>Empty-stock reports by µL short.</figcaption></figure>
+<figure><div id="c80"></div><figcaption>Summary: all rule-covered rates with intervals at the current seed.</figcaption></figure></div>
 </div></section>
 
 <footer><div class="col">Contact: <a href="mailto:harshinisuresha7@gmail.com">harshinisuresha7@gmail.com</a>. Code: <a href="https://github.com/Harshini-Suresha/lab-protocol">github.com/Harshini-Suresha/lab-protocol</a>.</div></footer>
@@ -604,7 +724,19 @@ const LIB=[
 ['Dye below pipette minimum','10 µL dye into B1',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'dye','B1',10]]],
 ['Sample overdraw','three 50 µL draws from 120 µL',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'sample','B1',50],[4,'sample','C1',50]]],
 ['Typo in a well name','B13 does not exist',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'buffer','B13',100]]],
-['No controls dispensed','only B1 and C1 are filled',[[1,'buffer','B1',100],[2,'sample','C1',50]]]];
+['No controls dispensed','only B1 and C1 are filled',[[1,'buffer','B1',100],[2,'sample','C1',50]]],
+['Minimal passing pair','two controls, nothing else',[[1,'buffer','A1',20],[2,'sample','A12',20]]],
+['Max-volume transfers','300 µL at the pipette ceiling',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'buffer','C3',300]]],
+['Over the ceiling','301 µL, one above max',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'buffer','C3',301]]],
+['At the floor','20 µL, exactly the minimum',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'dye','D4',20]]],
+['Below the floor','19 µL, one below minimum',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'dye','D4',19]]],
+['Well at capacity','exactly 200 µL in E5',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'buffer','E5',120],[4,'buffer','E5',80]]],
+['Well over capacity','205 µL in E5',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'buffer','E5',120],[4,'buffer','E5',85]]],
+['Stock exactly spent','dye ends at 0 µL',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'dye','F1',20],[4,'dye','F2',20]]],
+['Stock short by one','dye overdrawn 41 from 40',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'dye','F1',20],[4,'dye','F2',21]]],
+['Lowercase well','b1 instead of B1',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'buffer','b1',50]]],
+['Column zero','A0 does not exist',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'buffer','A0',50]]],
+['Full column','A1, A12 plus 80 µL down column 6',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'buffer','A6',80],[4,'buffer','B6',80],[5,'buffer','C6',80],[6,'buffer','D6',80],[7,'buffer','E6',80],[8,'buffer','F6',80],[9,'buffer','G6',80],[10,'buffer','H6',80]]]];
 function renderLib(){$('#lib').innerHTML=LIB.map(([n,d,st],i)=>{const cs=[...new Set(codesOf(st,DEF))],ul=st.reduce((a,x)=>a+x[3],0),w=new Set(st.map(x=>x[2]).filter(isWell)).size;
  return`<tr><td>${i+1}</td><td>${n}<br><span style="color:var(--mute)">${d}</span></td><td class="num">${st.length}</td><td class="num">${ul}</td><td class="num">${w}</td><td class="${cs.length?'bad':'ok'}">${cs.length?cs.join('<br>'):'pass'}</td><td><button class="b" data-lib="${i}">Open in Build</button></td></tr>`}).join('');
  $$('#lib [data-lib]').forEach(b=>b.onclick=()=>{bsteps=LIB[b.dataset.lib][2].map(x=>x.slice());go('build')})}
@@ -930,13 +1062,124 @@ function renderAnalysis(){const sel=$('#asel');if(!sel.innerHTML)sel.innerHTML=[
   const pa=()=>{renderA();renderA2();renderWaterfall();renderUtilization();renderTimeline()},gen=()=>{setTimeout(renderB,0);setTimeout(renderC,15);setTimeout(renderD,30);setTimeout(renderE,45);setTimeout(renderPipeline,60);setTimeout(renderRules,75);setTimeout(renderSchema,90);setTimeout(renderCooccurrence,105);setTimeout(renderSimilarity,120)};
   sel.onchange=pa;$('#ago').onclick=gen;$('#atime').onclick=renderT;pa();gen();setTimeout(renderT,60);setTimeout(renderPipeline,120);setTimeout(renderRules,135);setTimeout(renderSchema,150);setTimeout(renderCooccurrence,165);setTimeout(renderSimilarity,180)}
 
+/* atlas */
+const TAX=[
+ {v:'PIP −1 (19 µL)',d:'one below the 20 µL minimum',e:'PIPETTE_RANGE',f(s,r){s[Math.floor(r()*s.length)][3]=19}},
+ {v:'PIP +1 (301 µL)',d:'one above the 300 µL maximum',e:'PIPETTE_RANGE',f(s,r){s[Math.floor(r()*s.length)][3]=301}},
+ {v:'Zero volume (0 µL)',d:'a step that moves nothing',e:'PIPETTE_RANGE',f(s,r){s[Math.floor(r()*s.length)][3]=0}},
+ {v:'Huge volume (5000 µL)',d:'far above range, stock and well',e:'PIPETTE_RANGE',f(s,r){s[Math.floor(r()*s.length)][3]=5000}},
+ {v:'Stock exactly spent',d:'tube ends at 0 µL — must pass',e:'none',f(s,r,cfg){const u={};s.forEach(x=>u[x[1]]=(u[x[1]]||0)+x[3]);const ks=Object.keys(u);const k=ks[Math.floor(r()*ks.length)];cfg.stock[k]=u[k]}},
+ {v:'Stock short by 1 µL',d:'one microlitre overdrawn',e:'REAGENT_EMPTY',f(s,r,cfg){const u={};s.forEach(x=>u[x[1]]=(u[x[1]]||0)+x[3]);cfg.stock[Object.keys(u)[0]]=u[Object.keys(u)[0]]-1}},
+ {v:'Well exactly at cap',d:'200 µL in one well — must pass',e:'none',f(s,r){const used=new Set(s.map(x=>x[2]));const empt=ALLW.filter(w=>!used.has(w));const w=empt[Math.floor(r()*empt.length)];s.push([s.length+1,'buffer',w,200])}},
+ {v:'Well 5 over cap',d:'205 µL in one well',e:'WELL_OVERFLOW',f(s,r){const used=new Set(s.map(x=>x[2]));const empt=ALLW.filter(w=>!used.has(w));const w=empt[Math.floor(r()*empt.length)];s.push([s.length+1,'buffer',w,205])}},
+ {v:'Lowercase well (b1)',d:'wrong case in a well name',e:'WELL_MISSING',f(s,r){s[Math.floor(r()*s.length)][2]='b1'}},
+ {v:'Column zero (A0)',d:'column 0 does not exist',e:'WELL_MISSING',f(s,r){s[Math.floor(r()*s.length)][2]='A0'}},
+ {v:'Both controls dropped',d:'no step targets A1 or A12',e:'CONTROL_MISSING',f(s){return s.filter(y=>y[2]!=='A1'&&y[2]!=='A12')}},
+ {v:'Duplicated step',d:'same transfer twice — incidental',e:'any',f(s,r){const x=s[Math.floor(r()*s.length)];s.push([s.length+1,x[1],x[2],x[3]])}},
+ {v:'Swapped wells',d:'two steps trade wells — incidental',e:'any',f(s,r){const a=Math.floor(r()*s.length);let b=Math.floor(r()*s.length);if(b===a)b=(b+1)%s.length;const t=s[a][2];s[a][2]=s[b][2];s[b][2]=t}},
+ {v:'Dead-volume edge',d:'49 left with dead = 50 (opt-in)',e:'DEAD_VOLUME',f(s,r,cfg){cfg.dead=50;const u=s.filter(x=>x[1]==='buffer').reduce((a,x)=>a+x[3],0);cfg.stock.buffer=u+49}},
+ {v:'Dead-volume exact',d:'50 left with dead = 50 — must pass',e:'none',f(s,r,cfg){cfg.dead=50;const u={};s.forEach(x=>u[x[1]]=(u[x[1]]||0)+x[3]);for(const k in u)cfg.stock[k]=u[k]+50}}];
+function taxRun(bases,seed){return TAX.map((t,ti)=>{const r=prng(seed*100003+ti*7919+101);let hit=0;const cc={};
+  for(const b of bases){const s=b.map(x=>x.slice()),cfg={...GCFG,stock:{...GCFG.stock}};const rep=t.f(s,r,cfg);const cs=new Set(codesOf(rep||s,cfg));
+   if(t.e==='none'||t.e==='any'){if(cs.size)hit++}else if(cs.has(t.e))hit++;cs.forEach(c=>cc[c]=(cc[c]||0)+1)}
+  return{...t,n:bases.length,hit,cc}})}
+function atlasSafe(id,fn){try{fn()}catch(e){const el=document.getElementById(id);if(el)el.innerHTML='<p class="mono" style="color:var(--fail)">Chart failed: '+esc(String((e&&e.message)||e))+'</p>'}}
+function atlasHist(vals,bins,lo,hi){const c=Array(bins).fill(0);for(const v of vals)c[Math.min(bins-1,Math.max(0,Math.floor((v-lo)/(hi-lo)*bins)))]++;return c}
+function renderAtlas(){
+ const seed=+($('#tseed')&&$('#tseed').value)||7,n=Math.min(300,(+($('#tsel')&&$('#tsel').value)||100));
+ const bases=bset(n,seed),R=()=>prng(seed*7+3);
+ const shuffle=(a,r)=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+ const vols={buffer:[],sample:[],dye:[]};for(const b of bases)for(const [,r,,v] of b)if(vols[r])vols[r].push(v);
+ const wellsOf=b=>{const m={};for(const [,,w,v] of b)m[w]=(m[w]||0)+v;return m};
+ /* A volumes */
+ atlasSafe('c33',()=>{const c=atlasHist(vols.buffer,6,20,121);barChart('c33',{title:'Buffer sizes',bars:c.map((v,i)=>({label:i===5?'120':(20+i*20)+'–'+(39+i*20),v})),ylab:'transfers'})});
+ atlasSafe('c34',()=>{const c=atlasHist(vols.sample,6,20,121);barChart('c34',{title:'Sample sizes',bars:c.map((v,i)=>({label:i===5?'120':(20+i*20)+'–'+(39+i*20),v})),ylab:'transfers'})});
+ atlasSafe('c35',()=>{const c=atlasHist(vols.dye,6,20,121);barChart('c35',{title:'Dye sizes',bars:c.map((v,i)=>({label:i===5?'120':(20+i*20)+'–'+(39+i*20),v})),ylab:'transfers'})});
+ atlasSafe('c36',()=>{let cv=0,cn=0,ov=0,on=0;for(const b of bases){const m=wellsOf(b);for(const w in m){if(w==='A1'||w==='A12'){cv+=m[w];cn++}else{ov+=m[w];on++}}}barChart('c36',{title:'Control vs regular',bars:[{label:'control',v:Math.round(cv/Math.max(1,cn))},{label:'regular',v:Math.round(ov/Math.max(1,on))}],ylab:'mean µL per well'})});
+ atlasSafe('c37',()=>{let a=0,b2=0,c3=0;for(const b of bases){const dose={};for(const [,,w] of b)dose[w]=(dose[w]||0)+1;for(const w in dose){if(dose[w]===1)a++;else if(dose[w]===2)b2++;else c3++}}barChart('c37',{title:'Well reuse',bars:[{label:'1×',v:Math.round(a/n)},{label:'2×',v:Math.round(b2/n)},{label:'3×+',v:Math.round(c3/n)}],ylab:'wells per protocol'})});
+ atlasSafe('c38',()=>{const pct=bases.map(b=>{const m=wellsOf(b);return Math.max(...Object.values(m))/200*100});const c=atlasHist(pct,10,0,101);barChart('c38',{title:'Fullest well',bars:c.map((v,i)=>({label:(i*10)+'%',v})),ylab:'protocols'})});
+ /* C boundaries (cheap, sync) */
+ atlasSafe('c45',()=>{const ms=[1,5,10,15,20,21,25,30,40,50,60];lineChart('c45',{title:'Pipette minimum sweep',series:[{color:'var(--ink)',pts:ms.map(m=>[m,100*bases.filter(b=>codesOf(b,{...GCFG,pmin:m}).includes('PIPETTE_RANGE')).length/n])}],xmin:1,xmax:60,ymin:0,ymax:100,yfmt:fmtp,xfmt:v=>Math.round(v),xlab:'pipette minimum (µL)',ylab:'flagged'})});
+ atlasSafe('c46',()=>{const cs=[];for(let c=60;c<=300;c+=20)cs.push(c);lineChart('c46',{title:'Well limit sweep',series:[{color:'var(--ink)',pts:cs.map(c=>[c,100*bases.filter(b=>codesOf(b,{...GCFG,cap:c}).includes('WELL_OVERFLOW')).length/n])}],xmin:60,xmax:300,ymin:0,ymax:100,yfmt:fmtp,xfmt:v=>Math.round(v),xlab:'well limit (µL)',ylab:'flagged'})});
+ atlasSafe('c47',()=>{const ds=[];for(let d=0;d<=100;d+=10)ds.push(d);const proto=bases[0].map(x=>x.slice());const u={};proto.forEach(x=>u[x[1]]=(u[x[1]]||0)+x[3]);lineChart('c47',{title:'Dead volume sweep',series:[{color:'var(--ink)',pts:ds.map(d=>[d,100*bases.filter(b=>{const uu={};b.forEach(x=>uu[x[1]]=(uu[x[1]]||0)+x[3]);const st={...GCFG.stock};for(const k in uu)st[k]=uu[k]+50;return codesOf(b,{...GCFG,dead:d,stock:st}).includes('DEAD_VOLUME')}).length/n])}],xmin:0,xmax:100,ymin:0,ymax:100,yfmt:fmtp,xfmt:v=>Math.round(v),xlab:'dead volume (µL)',ylab:'flagged'})});
+ const bin=(id,title,xs,f)=>atlasSafe(id,()=>barChart(id,{title,bars:xs.map(x=>({label:String(x),v:f(x)?1:0})),ymax:1,ylab:'flagged'}));
+ bin('c48','Pipette boundary',[15,17,19,20,21,23,25],v=>codesOf([[1,'buffer','A1',100],[2,'sample','A12',50],[3,'dye','B1',v]],DEF).includes('PIPETTE_RANGE'));
+ bin('c49','Capacity boundary',[190,195,200,205,210],v=>codesOf([[1,'buffer','A1',100],[2,'sample','A12',50],[3,'buffer','E5',v]],DEF).includes('WELL_OVERFLOW'));
+ bin('c50','Stock boundary',[100,110,120,121,130],v=>codesOf([[1,'buffer','A1',100],[2,'sample','A12',50],[3,'dye','F1',v]],{...DEF,stock:{buffer:1000,dye:120,sample:120}}).includes('REAGENT_EMPTY'));
+ /* F reagents */
+ atlasSafe('c61',()=>{const c=atlasHist(bases.map(b=>100*b.reduce((a,[,r,,v])=>a+(r==='buffer'?v:0),0)/GCFG.stock.buffer),10,0,51);barChart('c61',{title:'Buffer used',bars:c.map((v,i)=>({label:(i*5)+'%',v})),ylab:'protocols'})});
+ atlasSafe('c62',()=>{const c=atlasHist(bases.map(b=>100*b.reduce((a,[,r,,v])=>a+(r==='sample'?v:0),0)/GCFG.stock.sample),10,0,101);barChart('c62',{title:'Sample used',bars:c.map((v,i)=>({label:(i*10)+'%',v})),ylab:'protocols'})});
+ atlasSafe('c63',()=>{const c=atlasHist(bases.map(b=>100*b.reduce((a,[,r,,v])=>a+(r==='dye'?v:0),0)/GCFG.stock.dye),10,0,101);barChart('c63',{title:'Dye used',bars:c.map((v,i)=>({label:(i*10)+'%',v})),ylab:'protocols'})});
+ atlasSafe('c64',()=>{const ss=[500,1000,1500,2000,2500,3000,4000];lineChart('c64',{title:'Buffer stock size',series:[{color:'var(--buf)',pts:ss.map(s=>[s,100*bases.filter(b=>codesOf(b,{...GCFG,stock:{...GCFG.stock,buffer:s}}).includes('REAGENT_EMPTY')).length/n])}],xmin:500,xmax:4000,ymin:0,ymax:100,yfmt:fmtp,xfmt:v=>Math.round(v),xlab:'starting buffer (µL)',ylab:'flagged'})});
+ atlasSafe('c65',()=>{const ss=[100,200,300,400,600,800];lineChart('c65',{title:'Sample stock size',series:[{color:'var(--sam)',pts:ss.map(s=>[s,100*bases.filter(b=>codesOf(b,{...GCFG,stock:{...GCFG.stock,sample:s}}).includes('REAGENT_EMPTY')).length/n])}],xmin:100,xmax:800,ymin:0,ymax:100,yfmt:fmtp,xfmt:v=>Math.round(v),xlab:'starting sample (µL)',ylab:'flagged'})});
+ atlasSafe('c66',()=>{const ss=[50,100,150,200,300,400];lineChart('c66',{title:'Dye stock size',series:[{color:'var(--dye)',pts:ss.map(s=>[s,100*bases.filter(b=>codesOf(b,{...GCFG,stock:{...GCFG.stock,dye:s}}).includes('REAGENT_EMPTY')).length/n])}],xmin:50,xmax:400,ymin:0,ymax:100,yfmt:fmtp,xfmt:v=>Math.round(v),xlab:'starting dye (µL)',ylab:'flagged'})});
+ /* G wells */
+ atlasSafe('c67',()=>{let co=0,cn=0,ed=0,en=0,ce=0,ceN=0;for(const b of bases){const m=wellsOf(b);for(const w in m){const r=w[0],c=+w.slice(1),corner=(('AD'.includes(r))&&['1','12'].includes(String(c)))||((r==='A'||r==='H')&&(c===1||c===12));const edge=r==='A'||r==='H'||c===1||c===12;if(r==='A'&&c===1||r==='A'&&c===12||r==='H'&&c===1||r==='H'&&c===12){co+=m[w];cn++}else if(edge){ed+=m[w];en++}else{ce+=m[w];ceN++}}}barChart('c67',{title:'Plate position',bars:[{label:'corner',v:Math.round(co/Math.max(1,cn))},{label:'edge',v:Math.round(ed/Math.max(1,en))},{label:'centre',v:Math.round(ce/Math.max(1,ceN))}],ylab:'mean µL'})});
+ atlasSafe('c68',()=>{const c=atlasHist(bases.map(b=>Object.keys(wellsOf(b)).length),10,5,26);barChart('c68',{title:'Wells used',bars:c.map((v,i)=>({label:String(5+i*2),v})),ylab:'protocols'})});
+ atlasSafe('c69',()=>{const c=atlasHist(bases.map(b=>{const d={};for(const [,,w] of b)d[w]=(d[w]||0)+1;return Object.values(d).filter(x=>x>1).length}),6,0,7);barChart('c69',{title:'Multi-dose wells',bars:c.map((v,i)=>({label:String(i),v})),ylab:'protocols'})});
+ atlasSafe('c70',()=>{const c=atlasHist(bases.map(b=>Object.values(wellsOf(b)).filter(v=>v>=180).length),6,0,7);barChart('c70',{title:'Near-limit wells',bars:c.map((v,i)=>({label:String(i),v})),ylab:'protocols'})});
+ atlasSafe('c71',()=>{const c=atlasHist(bases.map(b=>96-Object.keys(wellsOf(b)).length),10,70,97);barChart('c71',{title:'Unused wells',bars:c.map((v,i)=>({label:String(70+i*3),v})),ylab:'protocols'})});
+ atlasSafe('c72',()=>{const s1=[];const s2=[];const s3=[];for(const b of bases){const m=wellsOf(b),d={};for(const [,,w] of b)d[w]=(d[w]||0)+1;for(const w in m){if(d[w]===1)s1.push(m[w]);else if(d[w]===2)s2.push(m[w]);else s3.push(m[w])}}const avg=a=>Math.round(a.reduce((x,y)=>x+y,0)/Math.max(1,a.length));barChart('c72',{title:'Volume by dose count',bars:[{label:'1×',v:avg(s1)},{label:'2×',v:avg(s2)},{label:'3×+',v:avg(s3)}],ylab:'mean µL'})});
+ /* static tables */
+ $('#tG').innerHTML=[['Parse','O(S)','O(S)','one pass to read steps'],['Simulate','O(S)','O(W + R)','two counters per well and stock'],['Check (6 rules)','O(S)','O(1)','constant tests per step'],['Report','O(F)','O(F)','F = violations found'],['Total','O(S)','O(W + R + F)','S steps, W filled wells, R reagents']].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td style="color:var(--mute)">${r[3]}</td></tr>`).join('');
+ $('#tH').innerHTML=[['Pipette 20–300 µL','Opentrons P300 single-channel range'],['Well limit 200 µL','conservative vs ~360 µL 96-well datasheets'],['Plate 96 (A–H × 1–12)','384 (A–P × 1–24) accepted in Try it; drawings show 96'],['Reagents buffer 4000 / sample 800 / dye 400 µL','benchmark generator only; Try it accepts any'],['Dead volume 0 (off)','opt-in; enable per protocol'],['Controls A1 negative, A12 positive','lab convention for this assay']].map(r=>`<tr><td>${r[0]}</td><td style="color:var(--mute)">${r[1]}</td></tr>`).join('');
+ $('#atlasCount').textContent='48 charts · 4 tables · 15 fault variants · '+LIB.length+' protocols · '+$$('#glossary, section[data-p="glossary"] dt').length+' glossary terms.';
+ /* heavy: B stability, D patterns, E taxonomy, H figures — staggered */
+ setTimeout(()=>{
+  atlasSafe('c39',()=>{const seeds=[7,8,9,10,11],per=seeds.map(s=>bench2(100,s));dotPlot('c39',SCOPE.map(t=>{const vs=per.map(b=>100*b.single.find(r=>r.t===t).hit/100);return{label:t,v:vs.reduce((a,x)=>a+x,0)/5,lo:Math.min(...vs),hi:Math.max(...vs),color:'var(--ink)'}}))});
+  atlasSafe('c40',()=>{const ns=[50,100,200],all=ns.map(x=>bench2(x,seed));lineChart('c40',{title:'Rate vs set size',series:SCOPE.map((t,i)=>({name:['PIP','EMPTY','OVFLW','MISS','CTRL'][i],color:['var(--buf)','var(--dye)','var(--sam)','var(--warn)','var(--fail)'][i],pts:ns.map((x,j)=>[x,100*all[j].single.find(r=>r.t===t).hit/x])})),xmin:50,xmax:200,ymin:0,ymax:100,yfmt:fmtp,xfmt:v=>Math.round(v),xlab:'protocols',ylab:'caught'})});
+ },10);
+ setTimeout(()=>{
+  atlasSafe('c41',()=>{const ns=[50,100,200],all=ns.map(x=>bench2(x,seed));lineChart('c41',{title:'False alarms vs size',series:[{color:'var(--ink)',pts:ns.map((x,j)=>[x,all[j].fp])}],xmin:50,xmax:200,ymin:0,ymax:Math.max(2,...all.map(b=>b.fp+1)),yfmt:v=>Math.round(v),xfmt:v=>Math.round(v),xlab:'protocols',ylab:'false alarms'})});
+  atlasSafe('c42',()=>{const r=R(),order=['CONTROL_MISSING','PIPETTE_RANGE','WELL_OVERFLOW','WELL_MISSING','REAGENT_EMPTY'];const any=[],allf=[];for(let k=1;k<=5;k++){let aHit=0,fHit=0;for(const b of bases){const ch=shuffle([...order],r).slice(0,k);let st=b,cfg=GCFG;const tk=new Set();for(const t of ch){const rj=inject(t,st,cfg,r,tk);st=rj.steps;cfg=rj.cfg}const cs=new Set(codesOf(st,cfg));if(ch.some(t=>cs.has(t)))aHit++;if(ch.every(t=>cs.has(t)))fHit++}any.push([k,100*aHit/n]);allf.push([k,100*fHit/n])}lineChart('c42',{title:'Any vs all found',series:[{name:'any found',color:'var(--ink)',pts:any},{name:'all found',color:'var(--mute)',dash:true,pts:allf}],xmin:1,xmax:5,ymin:0,ymax:100,yfmt:fmtp,xfmt:v=>Math.round(v),xticks:[1,2,3,4,5],xlab:'errors injected',ylab:'protocols'})});
+  atlasSafe('c44',()=>{const sizes=[100,500,1000,2000],cfgT={stock:{buffer:1e15},dead:0,pmin:1,pmax:1e9,cap:1e15,rows:'ABCDEFGH',cols:12,ctrl:{},nosnap:true};const pts=sizes.map(s=>{const st=[...Array(s)].map((_,i)=>[i+1,'buffer',ALLW[i%96],20]);const ts=[];for(let q=0;q<5;q++){const t0=performance.now();sim(st,cfgT);ts.push(performance.now()-t0)}ts.sort((a,b)=>a-b);return[s,ts[2]]});lineChart('c44',{title:'Check time',series:[{color:'var(--ink)',pts}],xmin:100,xmax:2000,ymin:0,ymax:Math.max(1,...pts.map(p=>p[1]))*1.1,yfmt:v=>v.toFixed(1),xfmt:v=>v>=1000?(v/1000)+'k':v,xlab:'steps',ylab:'ms (median of 5)'})});
+ },30);
+ setTimeout(()=>{
+  const bb=bench2(n,seed);
+  atlasSafe('c51',()=>{grid('c51',{rl:SCOPE.map(s=>s.split('_')[0]),cl:SCOPE.map(s=>s.split('_')[0]),vals:bb.single.slice(0,5).map(r=>SCOPE.map(c=>100*(r.conf[c]||0)/r.n)),max:100,fmt:v=>Math.round(v)+'%'})});
+  atlasSafe('c52',()=>{const r=R();const med=SCOPE.map(t=>{const ps=[];for(const b of bases){const rj=inject(t,b,GCFG,r,new Set());const fr=sim(rj.steps,rj.cfg).frames;const i=fr.findIndex(f=>f.errs.length);if(i>=0)ps.push(100*i/Math.max(1,fr.length))}ps.sort((a,b)=>a-b);return ps.length?ps[Math.floor(ps.length/2)]:0});barChart('c52',{title:'First report position',bars:SCOPE.map((t,i)=>({label:t.split('_')[0],v:Math.round(med[i])})),ymax:100,ylab:'median % into run'})});
+  atlasSafe('c53',()=>{const r=R(),order=['CONTROL_MISSING','PIPETTE_RANGE','WELL_OVERFLOW','WELL_MISSING','REAGENT_EMPTY'],vc={};for(const b of bases){const ch=shuffle([...order],r).slice(0,2);let st=b,cfg=GCFG;const tk=new Set();for(const t of ch){const rj=inject(t,st,cfg,r,tk);st=rj.steps;cfg=rj.cfg}const L=codesOf(st,cfg).length;vc[L]=(vc[L]||0)+1}const ks=Object.keys(vc).map(Number).sort((a,b)=>a-b);barChart('c53',{title:'Reports with 2 errors',bars:ks.map(k=>({label:String(k),v:vc[k]})),ylab:'protocols'})});
+  atlasSafe('c80',()=>{dotPlot('c80',bb.single.slice(0,5).map(r=>{const[l,h]=wilson(r.hit,r.n);return{label:r.t,v:100*r.hit/r.n,lo:l*100,hi:h*100,color:'var(--ink)'}}))});
+ },60);
+ setTimeout(()=>{
+  atlasSafe('c54',()=>{const sub=bases.slice(0,50),sig=sub.map(s=>new Set(s.map(([,r,w,v])=>r+':'+w+':'+Math.floor(v/20))));const jac=(a,b)=>{let u=0;for(const x of a)if(b.has(x))u++;return u/(a.size+b.size-u)};const vals=[];for(let i=0;i<sub.length;i++)for(let j=i+1;j<sub.length;j++)vals.push(jac(sig[i],sig[j]));const c=atlasHist(vals,10,0,1.01);barChart('c54',{title:'Similarity distribution',bars:c.map((v,i)=>({label:(i/10).toFixed(1),v})),ylab:'pairs'})});
+  atlasSafe('c55',()=>{const pts=bases.map(b=>[b.length*1.0+0,b.reduce((a,[,r,,v])=>a+(r==='buffer'?v:0),0)]);const xs=bases.map(b=>[b.reduce((a,[,r,,v])=>a+(r==='sample'?v:0),0),b.reduce((a,[,r,,v])=>a+(r==='buffer'?v:0),0)]);lineChart('c55',{title:'Buffer vs sample',series:[{color:'var(--ink)',line:false,dots:true,pts:xs}],xmin:0,xmax:800,ymin:0,ymax:2500,yfmt:v=>Math.round(v),xfmt:v=>Math.round(v),xlab:'sample µL',ylab:'buffer µL'})});
+  atlasSafe('c56',()=>{const pts=bases.map(b=>[Object.keys(wellsOf(b)).length,b.length]);lineChart('c56',{title:'Steps vs wells',series:[{color:'var(--ink)',line:false,dots:true,pts}],xmin:5,xmax:25,ymin:8,ymax:24,yfmt:v=>Math.round(v),xfmt:v=>Math.round(v),xlab:'wells used',ylab:'steps'})});
+  atlasSafe('c43',()=>{const vc={};for(const b of bases){const L=codesOf(b,GCFG).length;vc[L]=(vc[L]||0)+1}const r=R(),order=['CONTROL_MISSING','PIPETTE_RANGE','WELL_OVERFLOW','WELL_MISSING','REAGENT_EMPTY'],vi={};for(const b of bases){const ch=shuffle([...order],r).slice(0,3);let st=b,cfg=GCFG;const tk=new Set();for(const t of ch){const rj=inject(t,st,cfg,r,tk);st=rj.steps;cfg=rj.cfg}const L=codesOf(st,cfg).length;vi[L]=(vi[L]||0)+1}const ks=[...new Set([...Object.keys(vc),...Object.keys(vi)].map(Number))].sort((a,b)=>a-b);const W2=560;let h='';const mx=Math.max(1,...ks.map(k=>Math.max(vc[k]||0,vi[k]||0)));const bw=(W2-120)/ks.length;ks.forEach((k,i)=>{const x=60+i*bw;h+=`<rect x="${x}" y="${200-(vc[k]||0)/mx*170}" width="${bw/2-2}" height="${((vc[k]||0)/mx*170).toFixed(1)}" style="fill:var(--pass)"><title>clean ${k}: ${vc[k]||0}</title></rect><rect x="${x+bw/2}" y="${200-(vi[k]||0)/mx*170}" width="${bw/2-2}" height="${((vi[k]||0)/mx*170).toFixed(1)}" style="fill:var(--fail)"><title>injected ${k}: ${vi[k]||0}</title></rect><text class="c-t" x="${x+bw/2}" y="214" text-anchor="middle">${k}</text>`});h+=`<text class="c-l" x="80" y="20" style="fill:var(--pass)">clean</text><text class="c-l" x="150" y="20" style="fill:var(--fail)">3 errors</text>`;svgOut('c43',W2,230,h,'Reports clean vs injected')});
+ },90);
+ setTimeout(()=>{
+  const tx=taxRun(bases,seed);
+  $('#tE').innerHTML=tx.map((r,i)=>`<tr><td>${i+1}</td><td>${r.v}</td><td style="color:var(--mute)">${r.d}</td><td><code class="${r.e!=='none'&&r.e!=='any'?'k':''}">${r.e}</code></td><td class="num">${r.n}</td><td class="num">${r.hit}</td><td class="num">${(100*r.hit/r.n).toFixed(1)}%</td></tr>`).join('');
+  atlasSafe('c57',()=>barChart('c57',{title:'Flag rate per variant',bars:tx.map((r,i)=>({label:String(i+1),v:100*r.hit/r.n,color:r.e==='none'?'var(--warn)':r.e==='any'?'var(--mute)':'var(--ink)'})),ymax:100,ylab:'% flagged'}));
+  atlasSafe('c58',()=>{const g=i=>100*tx[i].hit/tx[i].n;barChart('c58',{title:'Boundary pairs',bars:[{label:'19 pass?no',v:g(0),color:'var(--fail)'},{label:'exact 0?',v:g(4),color:'var(--pass)'},{label:'cap exact',v:g(6),color:'var(--pass)'},{label:'cap +5',v:g(7),color:'var(--fail)'},{label:'dead exact',v:g(14),color:'var(--pass)'},{label:'dead edge',v:g(13),color:'var(--fail)'}],ymax:100,ylab:'% flagged'})});
+  atlasSafe('c59',()=>{const idx=[11,12];barChart('c59',{title:'No-rule faults',bars:idx.map(i=>({label:tx[i].v.split(' ')[0],v:100*tx[i].hit/tx[i].n})),ymax:100,ylab:'% flagged (any code)'})});
+  atlasSafe('c60',()=>{const agg={};for(const i of [3,11,12])for(const c in tx[i].cc)agg[c]=(agg[c]||0)+tx[i].cc[c];const ks=Object.keys(agg);barChart('c60',{title:'Codes from rule-less faults',bars:ks.map(k=>({label:k.split('_')[0],v:agg[k]})),ylab:'reports'})});
+  /* tF seed table */
+  $('#tF').innerHTML=[7,8,9,10,11].map(s=>{const bs=bset(n,s);let fp=0,tot=0;for(const b of bs){if(codesOf(b,GCFG).length)fp++;tot+=b.reduce((a,x)=>a+x[3],0)}return`<tr><td>${s}</td><td class="num">${n}</td><td class="num">${(bs.reduce((a,b)=>a+b.length,0)/n).toFixed(1)}</td><td class="num">${Math.round(tot/n)}</td><td class="num">${fp}</td></tr>`}).join('');
+ },120);
+ setTimeout(()=>{
+  /* H figures */
+  atlasSafe('c73',()=>{const steps=['volume in range?','stock left?','well fits?','well exists?','+ controls at end'];let h='';steps.forEach((s,i)=>{const y=14+i*30;h+=`<rect x="150" y="${y}" width="260" height="22" rx="4" style="fill:var(--ink)" opacity=".12"/><text class="c-t" x="280" y="${y+15}" text-anchor="middle">${s}</text>`;if(i<4)h+=`<line x1="280" x2="280" y1="${y+22}" y2="${y+30}" style="stroke:var(--ink)"/>`});svgOut('c73',560,170,h,'Rule order')});
+  atlasSafe('c74',()=>{let h=`<text class="c-t" x="20" y="20">stock[buffer] 1000 → 900 → 800</text><rect x="20" y="28" width="300" height="14" style="fill:var(--rule)"/><rect x="20" y="28" width="240" height="14" style="fill:var(--buf)"/><text class="c-t" x="20" y="62">wells[B1] 0 → 100 → 100</text><rect x="20" y="70" width="300" height="14" style="fill:var(--rule)"/><rect x="20" y="70" width="150" height="14" style="fill:var(--sam)"/><text class="c-t" x="20" y="110" style="fill:var(--mute)">two counters per entity, updated every step</text>`;svgOut('c74',560,130,h,'Simulator state')});
+  atlasSafe('c75',()=>{const sizes=[100,500,1000,2000],cfgT={stock:{buffer:1e15},dead:0,pmin:1,pmax:1e9,cap:1e15,rows:'ABCDEFGH',cols:12,ctrl:{},nosnap:true};const pts=sizes.map(s=>{const st=[...Array(s)].map((_,i)=>[i+1,'buffer',ALLW[i%96],20]);const ts=[];for(let q=0;q<3;q++){const t0=performance.now();sim(st,cfgT);ts.push(performance.now()-t0)}ts.sort((a,b)=>a-b);return[s,ts[1]/s*1000]});lineChart('c75',{title:'Cost per step',series:[{color:'var(--ink)',pts}],xmin:100,xmax:2000,ymin:0,ymax:Math.max(1,...pts.map(p=>p[1]))*1.2,yfmt:v=>v.toFixed(2),xfmt:v=>v>=1000?(v/1000)+'k':v,xlab:'steps',ylab:'µs per step'})});
+  atlasSafe('c76',()=>{const means=[0,1,2,3].map(k=>{if(!k)return 0;const r=R(),order=['CONTROL_MISSING','PIPETTE_RANGE','WELL_OVERFLOW','WELL_MISSING','REAGENT_EMPTY'];let tot=0;for(const b of bases){const ch=shuffle([...order],r).slice(0,k);let st=b,cfg=GCFG;const tk=new Set();for(const t of ch){const rj=inject(t,st,cfg,r,tk);st=rj.steps;cfg=rj.cfg}tot+=codesOf(st,cfg).length}return tot/n});barChart('c76',{title:'Reports vs faults',bars:means.map((v,k)=>({label:String(k),v:+v.toFixed(1)})),ylab:'mean reports'})});
+  bin('c77','Distance outside range',[1,5,10,19,50,200],d=>codesOf([[1,'buffer','A1',100],[2,'sample','A12',50],[3,'dye','B1',20-d]],DEF).length>0);
+  bin('c78','Over the well limit',[1,5,10,50,100],d=>codesOf([[1,'buffer','A1',100],[2,'sample','A12',50],[3,'buffer','E5',200+d]],DEF).length>0);
+  bin('c79','Short by µL',[1,2,5,10,20],d=>{const u=120;return codesOf([[1,'buffer','A1',100],[2,'sample','A12',50],[3,'dye','F1',u+d]],{...DEF,stock:{buffer:1000,dye:2*u,sample:120}}).length>0});
+ },150);
+ $('#tgo').onclick=renderAtlas;
+}
+
 /* navigation */
 function go(id){
  $$('section[data-p]').forEach(s=>s.classList.toggle('on',s.dataset.p===id));
  $$('#nav button').forEach(b=>b.dataset.go===id?b.setAttribute('aria-current','page'):b.removeAttribute('aria-current'));
  if(id==='results')runBench();if(id==='build')drawBuilder();if(id==='validate'&&$('#vout').textContent.startsWith('Results appear'))vrun();
- if(id==='data')renderLib();if(id==='analysis')renderAnalysis();
- window.scrollTo(0,0)}
+  if(id==='data')renderLib();if(id==='analysis')renderAnalysis();if(id==='atlas')renderAtlas();
+  try{if(history.replaceState)history.replaceState(null,'','#/'+id)}catch(e){}
+  window.scrollTo(0,0)}
 $$('[data-go]').forEach(e=>e.addEventListener('click',ev=>{ev.preventDefault();go(e.dataset.go)}));
-draw();go('home');
+const VALID=['home','build','validate','data','analysis','atlas','method','results','report','glossary'];
+let startPage='home';try{const h=(location.hash||'').replace(/^#\/?/,'');if(VALID.includes(h))startPage=h}catch(e){}
+draw();go(startPage);
 </script></body></html>
