@@ -903,9 +903,10 @@ function renderCooccurrence(){const n=+$('#ansel').value||300,seed=+$('#aseed').
   }
   svgOut('c31',W,H,h,'Error co-occurrence');
 }
+function jaccard(a,b){const u=[...a].filter(x=>b.has(x)).length;return u/(a.size+b.size-u)||0}
 function renderSimilarity(){const n=Math.min(50,+$('#ansel').value||300),seed=+$('#aseed').value||7,bases=bset(n,seed);
-  const sig=b.map(s=>s.map(([,r,w,v])=>`${r}:${w}:${Math.floor(v/20)}`).sort().join('|'));
-  const sim=sig.map((_,i)=>sig.map((_,j)=>i===j?1:({a:new Set(sig[i].split('|')),b:new Set(sig[j].split('|')),u:0,i:0}=>({u:(a=[...a].filter(x=>b.has(x)).length),i:a.length+b.length-a.length}))(a,b,u,i).u/(a+b-u)||0)));
+  const sig=bases.map(s=>new Set(s.map(([,r,w,v])=>`${r}:${w}:${Math.floor(v/20)}`)));
+  const sim=sig.map((_,i)=>sig.map((_,j)=>i===j?1:jaccard(sig[i],sig[j])));
   const W=560,H=560,L=40,T=40,cw=(W-L-4)/n;
   let h='';
   for(let i=0;i<n;i++)for(let j=0;j<n;j++){const v=sim[i][j],q=v;
