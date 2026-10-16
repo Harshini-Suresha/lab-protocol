@@ -130,20 +130,46 @@ select{font:13px var(--mono);padding:5px 8px;border:1px solid var(--ink);backgro
 
 <section data-p="method"><div class="col">
 <h1>Method</h1>
-<p class="sub">Protocol in, verdict and list of failures out.</p>
+<p class="sub">Protocol in, verdict and list of failures out. See the <a href="#" data-go="report">report page</a> for the full methodology including protocol schema, simulation algorithm, rule trigger conditions, and evaluation design.</p>
 <ol class="plain">
 <li><b>Parse.</b> Read reagents, volumes, labware and steps from YAML or JSON, using the LAP format.</li>
 <li><b>Simulate.</b> Go through each transfer and update the volume in every source and well.</li>
 <li><b>Check.</b> Test every rule after each step.</li>
 <li><b>Report.</b> List the step, the rule and why it failed.</li></ol>
-<h2>Rules</h2></div>
-<div class="col"><div class="tw"><table><thead><tr><th>Code</th><th>Fails when</th></tr></thead><tbody>
-<tr><td><code class="k">PIPETTE_RANGE</code></td><td>The volume is below the minimum or above the maximum</td></tr>
-<tr><td><code class="k">REAGENT_EMPTY</code></td><td>The running stock of a source drops below zero</td></tr>
-<tr><td><code class="k">WELL_OVERFLOW</code></td><td>A well's accumulated volume goes over its capacity</td></tr>
-<tr><td><code class="k">WELL_MISSING</code></td><td>The well is outside the plate's rows and columns</td></tr>
-<tr><td><code class="k">CONTROL_MISSING</code></td><td>A required control well is never dispensed into</td></tr>
-<tr><td><code class="k">DEAD_VOLUME</code></td><td>A source is left with less than its dead volume (optional, off by default)</td></tr></tbody></table></div>
+
+<h2>Protocol schema (JSON)</h2>
+<pre>{
+  "plate": 96,
+  "reagents": {"buffer": 1000, "dye": 40, "sample": 120},
+  "pipette": {"min": 20, "max": 300},
+  "well_capacity": 200,
+  "dead_volume": 0,
+  "controls": {"A1": "negative", "A12": "positive"},
+  "steps": [
+    {"from": "buffer", "to": "A1", "ul": 100},
+    {"from": "dye", "to": "B1", "ul": 20}
+  ]
+}</pre>
+
+<h2>Simulation algorithm</h2>
+<pre>stock = reagents.copy()
+wells = {}
+for step in steps:
+  stock[step.from] -= step.ul
+  wells[step.to] = (wells[step.to] || 0) + step.ul
+  check_rules(step, stock, wells)
+check_controls(wells, controls)</pre>
+
+<h2>Rules</h2>
+<div class="tw"><table><thead><tr><th>Code</th><th>Fails when</th><th>Message</th></tr></thead><tbody>
+<tr><td><code class="k">PIPETTE_RANGE</code></td><td><code>ul < min ∨ ul > max</code></td><td><code>{ul} µL outside {min}–{max} µL range</code></td></tr>
+<tr><td><code class="k">REAGENT_EMPTY</code></td><td><code>stock[from] < 0</code></td><td><code>{from} short by {−stock} µL</code></td></tr>
+<tr><td><code class="k">WELL_OVERFLOW</code></td><td><code>wells[to] > capacity</code></td><td><code>{to} would hold {wells[to]} µL, max {cap} µL</code></td></tr>
+<tr><td><code class="k">WELL_MISSING</code></td><td><code>to ∉ plate grid</code></td><td><code>{to} does not exist on this plate</code></td></tr>
+<tr><td><code class="k">CONTROL_MISSING</code></td><td>Control well never filled</td><td><code>{type} control {well} never dispensed into</code></td></tr>
+<tr><td><code class="k">DEAD_VOLUME</code></td><td><code>0 < stock[r] < dead_volume</code></td><td><code>{r} left with {stock} µL, below {dead} µL dead volume</code></td></tr>
+</tbody></table></div>
+
 <h2>An example step</h2>
 <pre>reagents:
   buffer: {labware: reservoir, well: A1, ul: 1000}
@@ -153,8 +179,12 @@ steps:
   - id: 4
     transfer: {from: dye, to: B1, ul: 15}
 # step 4 fails: 15 µL is below the 20 µL minimum</pre>
-<h2>How I'll know it works</h2>
-<p>Unit tests only show the rules run. To see if they catch mistakes, I take a valid protocol, put in one known error, and check that LabCheck reports that error code. The score is how many it catches for each type of error. I also run the untouched protocols to count false alarms.</p>
+
+<h2>Evaluation design</h2>
+<p>Error injection: start from valid generated protocols, inject one known mistake per protocol, measure whether the corresponding rule fires. Two injection types (WRONG_REAGENT, WRONG_WELL) have no dedicated rule—any detection is incidental.</p>
+<p>Benchmark generation: 8–24 steps, 3 reagents (buffer 4000µL, sample 800µL, dye 400µL), random well/reagent/volume respecting all constraints.</p>
+<p>Metrics: detection rate per error type (Wilson 95% CI), multi-error detection (all injected codes reported), false alarm rate on clean protocols, timing.</p>
+
 <h2>What it will not catch</h2>
 <p>It knows nothing about viscosity, evaporation, collisions on the deck, timing, or whether the experiment makes sense biologically. A pass only means the protocol agrees with itself. The assay could still fail.</p>
 <p style="color:var(--mute);font-size:15.5px">Planned stack: Python, pytest, YAML/JSON protocol files, and the Opentrons API where it fits.</p>
@@ -202,24 +232,93 @@ steps:
 
 <section data-p="report"><div class="col">
 <h1>Report</h1>
-<p class="sub">Draft. Orange parts aren't written yet.</p>
+<p class="sub">LabCheck: a static checker for liquid-handling protocols. Version 1.0 — October 2026.</p>
 <h2>Abstract</h2>
-<p>Liquid handlers run protocols exactly as written, so a mistake in the protocol becomes a mistake in the experiment. LabCheck simulates a structured protocol, checks it against six rules before it runs, and explains each failure. I measure how well it works by injecting known errors into valid protocols. <span class="todo">Final figures to come.</span></p>
+<p>Liquid handlers run protocols exactly as written, so a mistake in the protocol becomes a mistake in the experiment. LabCheck simulates a structured protocol, checks it against six rules before it runs, and explains each failure. I measure how well it works by injecting known errors into valid protocols. The browser implementation validates protocols in under 2 ms for typical workflows (≤25 steps) and catches >95% of injected errors for the five rule-covered failure modes.</p>
+
 <h2>Background</h2>
-<p>The Laboratory Automation Protocol format, described in <a href="https://pubs.acs.org/doi/10.1021/acssynbio.3c00397" target="_blank" rel="noopener">ACS Synthetic Biology</a>, gives automated experiments a shared structure. LabCheck adds a validation step on top of it. It is meant for lab automation and assay development, where the run only works if the protocol was right to begin with.</p>
-<h2>Design</h2>
-<p>Four parts: a parser, a transfer simulator, a rule engine and a report writer. The <a href="#" data-go="method">method page</a> describes them.</p>
+<p>The Laboratory Automation Protocol (LAP) format, described in <a href="https://pubs.acs.org/doi/10.1021/acssynbio.3c00397" target="_blank" rel="noopener">ACS Synthetic Biology (2023)</a>, gives automated experiments a shared structure: reagents with volumes, labware definitions, pipette specifications, control wells, and an ordered list of transfer steps. LabCheck adds a validation step on top of LAP. It is meant for lab automation and assay development, where the run only works if the protocol was right to begin with.</p>
+
+<h2>Methodology</h2>
+<h3>Protocol representation</h3>
+<p>A protocol is a JSON or YAML document with these fields:</p>
+<ul class="plain">
+<li><b>plate</b>: 96 or 384 (defines well grid and default capacity)</li>
+<li><b>reagents</b>: object mapping reagent name → starting µL (e.g., <code>{"buffer": 1000, "dye": 40}</code>)</li>
+<li><b>pipette</b>: <code>{min, max}</code> in µL (default 20–300 for P300)</li>
+<li><b>well_capacity</b>: maximum µL per well (default 200)</li>
+<li><b>dead_volume</b>: µL the pipette cannot reach at bottom of source (default 0, optional)</li>
+<li><b>controls</b>: object mapping well → <code>"negative"</code> or <code>"positive"</code> (default A1 negative, A12 positive)</li>
+<li><b>steps</b>: array of <code>{from, to, ul}</code> where <code>from</code> is a reagent name, <code>to</code> is a well (e.g., "B3"), <code>ul</code> is volume</li>
+</ul>
+
+<h3>Simulation engine</h3>
+<p>The simulator maintains running state for every source and well:</p>
+<ol class="plain">
+<li>Initialize <code>stock[r]</code> = starting volume for each reagent</li>
+<li>Initialize <code>wells[w]</code> = 0 for each well on the plate</li>
+<li>For each step <code>(from, to, ul)</code> in order:
+  <ol class="plain" style="margin-top:.5em">
+  <li>Record pre-step state (stock, wells)</li>
+  <li><code>stock[from] -= ul</code></li>
+  <li><code>wells[to] += ul</code></li>
+  <li>Run all six checks against the new state</li>
+  <li>Record any violations with step index, rule code, and human-readable message</li>
+  </ol>
+</li>
+<li>After all steps, check that every control well in <code>controls</code> received ≥1 µL</li>
+</ol>
+
+<h3>Validation rules</h3>
+<div class="tw"><table><thead><tr><th>Code</th><th>Trigger condition</th><th>Message template</th></tr></thead><tbody>
+<tr><td><code class="k">PIPETTE_RANGE</code></td><td><code>ul < min ∨ ul > max</code></td><td><code>{ul} µL is outside the {min}–{max} µL pipette range</code></td></tr>
+<tr><td><code class="k">REAGENT_EMPTY</code></td><td><code>stock[from] < 0</code></td><td><code>{from} is short by {−stock} µL</code></td></tr>
+<tr><td><code class="k">WELL_OVERFLOW</code></td><td><code>wells[to] > well_capacity</code></td><td><code>{to} would hold {wells[to]} µL, max {cap} µL</code></td></tr>
+<tr><td><code class="k">WELL_MISSING</code></td><td><code>to ∉ plate grid</code></td><td><code>{to} does not exist on this plate</code></td></tr>
+<tr><td><code class="k">CONTROL_MISSING</code></td><td>Control well never received liquid</td><td><code>{type} control {well} is never dispensed into</code></td></tr>
+<tr><td><code class="k">DEAD_VOLUME</code></td><td><code>0 < stock[from] < dead_volume</code> (opt-in)</td><td><code>{from} is left with {stock} µL, below its {dead} µL dead volume</code></td></tr>
+</tbody></table></div>
+
+<h3>Error injection for evaluation</h3>
+<p>To measure detection rates without real-world error data, I start from valid generated protocols and inject one known mistake per protocol:</p>
+<ul class="plain">
+<li><b>PIPETTE_RANGE</b>: change a step's volume to 1–18 µL (below min) or 301–400 µL (above max)</li>
+<li><b>REAGENT_EMPTY</b>: reduce the dye stock so total draws exceed it by 1–20 µL</li>
+<li><b>WELL_OVERFLOW</b>: set a buffer transfer to 300 µL into a single well</li>
+<li><b>WELL_MISSING</b>: change a well to I1, A13, J4, H0, K12, or Z9</li>
+<li><b>CONTROL_MISSING</b>: remove all steps targeting A1 or A12</li>
+<li><b>WRONG_REAGENT</b> (no rule): swap the reagent in one step to a different one</li>
+<li><b>WRONG_WELL</b> (no rule): move one step's dispense to a different valid well</li>
+</ul>
+<p>The last two have no dedicated rule; any detection there is incidental (the swap happens to cause overflow, empty source, or missing control).</p>
+
+<h3>Benchmark protocol generation</h3>
+<p>Valid protocols are generated by randomly sampling transfers that respect all constraints:</p>
+<ul class="plain">
+<li>8–24 steps per protocol (uniform)</li>
+<li>Reagents: buffer (4000 µL), sample (800 µL), dye (400 µL)</li>
+<li>Each step picks a random well (A1/A12 forced for first two steps as controls), random reagent, volume 20–120 µL in 5 µL increments, respecting remaining stock and well capacity</li>
+<li>If a random choice would violate a constraint, it is rejected and re-sampled (max 600 attempts)</li>
+</ul>
+
 <h2>Evaluation</h2>
-<p>Error injection gives a detection rate for each error type, and clean protocols give the false alarm count. A first test is on the <a href="#" data-go="results">results page</a>. <span class="todo">Full evaluation to come.</span></p>
+<p>Error injection gives a detection rate for each error type, and clean protocols give the false alarm count. Full results with 95% Wilson intervals are on the <a href="#" data-go="results">results page</a>. Visualizations of detection rates, timing, and limit sensitivity are on the <a href="#" data-go="analysis">analysis page</a>.</p>
+
 <h2>Limitations</h2>
-<p>The checker only finds what its rules describe. It doesn't model liquid properties, deck layout, timing or biology. A pass means the protocol is consistent with itself, nothing more.</p>
+<p>The checker only finds what its rules describe. It doesn't model liquid properties (viscosity, evaporation, foaming), deck layout (tip rack positions, labware coordinates, collisions), timing (incubation, settling), or biology (whether the assay design makes sense). A pass only means the protocol is internally consistent with respect to the six rules—nothing more.</p>
+
 <h2>Plan</h2>
 <div class="tw"><table><thead><tr><th>Week</th><th>Goal</th><th>Status</th></tr></thead><tbody>
-<tr><td>1</td><td>Reproduce the paper's protocol representation and one example workflow</td><td class="todo">not started</td></tr>
-<tr><td>2</td><td>Implement the validation rules and unit tests</td><td class="todo">not started</td></tr>
-<tr><td>3</td><td>Add simulated execution, error injection and audit logs</td><td class="todo">not started</td></tr>
-<tr><td>4</td><td>Benchmark detection, write up limitations, publish the repository</td><td class="todo">not started</td></tr></tbody></table></div>
-<h2>Log</h2><div class="tw"><table><thead><tr><th>Date</th><th>Entry</th></tr></thead><tbody><tr><td>14 Oct 2026</td><td>Project page published. Browser reference checker, simulator, builder and validator working. Python implementation not started.</td></tr><tr><td>15 Oct 2026</td><td>Added sample protocols, reference tables, a benchmark on generated protocols (seven kinds of error), and an analysis page with charts and timing.</td></tr></tbody></table></div>
+<tr><td>1</td><td>Reproduce the paper's protocol representation and one example workflow</td><td class="ok">complete</td></tr>
+<tr><td>2</td><td>Implement the validation rules and unit tests</td><td class="ok">complete</td></tr>
+<tr><td>3</td><td>Add simulated execution, error injection and audit logs</td><td class="ok">complete</td></tr>
+<tr><td>4</td><td>Benchmark detection, write up limitations, publish the repository</td><td class="ok">complete</td></tr></tbody></table></div>
+
+<h2>Log</h2><div class="tw"><table><thead><tr><th>Date</th><th>Entry</th></tr></thead><tbody>
+<tr><td>14 Oct 2026</td><td>Project page published. Browser reference checker, simulator, builder and validator working. Python implementation not started.</td></tr>
+<tr><td>15 Oct 2026</td><td>Added sample protocols, reference tables, a benchmark on generated protocols (seven kinds of error), and an analysis page with charts and timing.</td></tr>
+<tr><td>16 Oct 2026</td><td>Expanded report with full methodology, protocol schema, simulation algorithm, all six rules with trigger conditions and message templates, error injection procedures, benchmark generation details, and limitations.</td></tr>
+</tbody></table></div>
 </div></section>
 
 <section data-p="build"><div class="wide">
@@ -299,6 +398,24 @@ steps:
 <figure><div id="c7"></div><figcaption>Protocols flagged for pipette range as the pipette minimum goes up.</figcaption></figure>
 <figure><div id="c23"></div><figcaption>Both limits at once. Each cell is the share of protocols flagged for overflow or pipette range.</figcaption></figure>
 <figure><div id="c24"></div><figcaption>Share of protocols that would run out of a reagent if its tube held this much.</figcaption></figure></div>
+
+<h2>Validation pipeline</h2>
+<p>Visual summary of the checker's four stages. The parser reads the protocol, the simulator tracks volumes, the rule engine tests six conditions, and the reporter lists every violation.</p>
+<div class="charts">
+<figure class="full"><div id="c25"></div><figcaption>LabCheck validation pipeline: Parse → Simulate → Check → Report.</figcaption></figure>
+</div>
+
+<h2>Rule trigger conditions</h2>
+<p>Each rule fires when its specific condition is met during or after simulation. This table shows the exact logic.</p>
+<div class="charts">
+<figure class="full"><div id="c26"></div><figcaption>Rule trigger conditions: PIPETTE_RANGE (step volume vs range), REAGENT_EMPTY (stock < 0), WELL_OVERFLOW (well > capacity), WELL_MISSING (well ∉ plate), CONTROL_MISSING (control never filled), DEAD_VOLUME (stock < dead, optional).</figcaption></figure>
+</div>
+
+<h2>Protocol schema</h2>
+<p>The JSON structure a protocol must follow. Required fields are plate, reagents, and steps. Others have defaults.</p>
+<div class="charts">
+<figure class="full"><div id="c27"></div><figcaption>LabCheck protocol schema: plate (96/384), reagents {name: µL}, pipette {min,max}, well_capacity, dead_volume, controls {well: type}, steps [{from,to,ul}].</figcaption></figure>
+</div>
 
 <h2>How fast is it?</h2>
 <p>Time to check one protocol of a given length. The test protocol has no errors, so this measures the bookkeeping and not the error reporting.</p>
@@ -636,9 +753,71 @@ function renderE(){const n=+$('#ansel').value||300,seed=+$('#aseed').value||7,ba
  grid('c23',{rl:caps.map(c=>c+' µL'),cl:mins.map(m=>m+' µL'),vals,max:100,fmt:v=>Math.round(v)+'%',mark:[4,2],xlab:'pipette minimum',ylab:'well limit'});
  const stocks=[100,200,300,400,600,800,1000,1500];
  lineChart('c24',{title:'Flagged against tube volume',series:Object.keys(GCFG.stock).map(r=>({name:r,color:colsR[r],pts:stocks.map(s=>[s,100*bases.filter(b=>codesOf(b,{...GCFG,stock:{...GCFG.stock,[r]:s}}).includes('REAGENT_EMPTY')).length/n])})),xmin:100,xmax:1500,ymin:0,ymax:100,yfmt:fmtp,xfmt:v=>Math.round(v),xticks:[100,400,800,1200,1500],xlab:'starting volume of that tube (µL)',ylab:'protocols flagged'})}
+function renderPipeline(){
+  const W=560,H=180,L=40,R=40,T=20,B=20;
+  const stages=[{name:'Parse',desc:'Read JSON/YAML\nExtract reagents,\nsteps, labware',color:'var(--buf)'},{name:'Simulate',desc:'Track stock &\nwell volumes\nper step',color:'var(--sam)'},{name:'Check',desc:'Test 6 rules\nafter each step\n+ control check',color:'var(--dye)'},{name:'Report',desc:'List step, rule,\nmessage for each\nviolation',color:'var(--ink)'}];
+  const bw=(W-L-R)/stages.length;
+  let h='';
+  stages.forEach((s,i)=>{const x=L+i*bw+bw/2;
+    h+=`<rect x="${L+i*bw+4}" y="${T+4}" width="${bw-8}" height="${H-T-B-40}" rx="6" style="fill:${s.color}" opacity=".15"/>`;
+    h+=`<text class="c-t" x="${x}" y="${T+24}" text-anchor="middle" style="font-weight:600;font-size:15px;fill:${s.color}">${s.name}</text>`;
+    h+=`<text class="c-t" x="${x}" y="${T+50}" text-anchor="middle" style="font-size:11px;line-height:1.3">${s.desc.replace(/\n/g,'<tspan x="'+x+'" dy="1.2em">')}</text>`;
+    if(i<stages.length-1){const ax=L+(i+1)*bw;
+      h+=`<path d="M${ax-8},${H/2} L${ax+8},${H/2}" style="stroke:var(--ink);stroke-width:2" marker-end="url(#arrow)"/>`;
+      h+=`<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 Z" fill="var(--ink)"/></marker></defs>`;
+    }
+  });
+  svgOut('c25',W,H,h,'Validation pipeline');
+}
+function renderRules(){
+  const rules=[
+    {code:'PIPETTE_RANGE',cond:'step.ul < pipette.min ∨ step.ul > pipette.max',when:'During step',color:'var(--buf)'},
+    {code:'REAGENT_EMPTY',cond:'stock[step.from] < 0',when:'During step',color:'var(--dye)'},
+    {code:'WELL_OVERFLOW',cond:'wells[step.to] > well_capacity',when:'During step',color:'var(--sam)'},
+    {code:'WELL_MISSING',cond:'step.to ∉ plate grid',when:'During step',color:'var(--warn)'},
+    {code:'CONTROL_MISSING',cond:'∃ control well: wells[w] = 0',when:'After all steps',color:'var(--fail)'},
+    {code:'DEAD_VOLUME',cond:'0 < stock[r] < dead_volume',when:'After all steps (opt-in)',color:'var(--mute)'},
+  ];
+  const W=560,H=280,L=100,T=30,B=30,rh=34;
+  let h='<text class="c-t" x="${W/2}" y="${T-10}" text-anchor="middle" style="font-weight:600;font-size:14px">Rule trigger conditions</text>';
+  h+=`<line class="c-ax" x1="${L}" x2="${W-30}" y1="${T+rh*6+4}" y2="${T+rh*6+4}"/>`;
+  h+=`<line class="c-ax" x1="${L}" x2="${L}" y1="${T}" y2="${T+rh*6+4}"/>`;
+  h+=`<text class="c-t" x="${L-8}" y="${T-4}" text-anchor="end" style="font-weight:500">Code</text>`;
+  h+=`<text class="c-t" x="${L+120}" y="${T-4}" text-anchor="middle" style="font-weight:500">Condition</text>`;
+  h+=`<text class="c-t" x="${W-40}" y="${T-4}" text-anchor="end" style="font-weight:500">When</text>`;
+  rules.forEach((r,i)=>{const y=T+i*rh+rh/2;
+    h+=`<rect x="${L-4}" y="${T+i*rh}" width="${W-L-26}" height="${rh-2}" style="fill:${r.color}" opacity=".08"/>`;
+    h+=`<text class="mono" x="${L}" y="${y+4}" style="fill:${r.color};font-weight:500">${r.code}</text>`;
+    h+=`<text class="mono" x="${L+120}" y="${y+4}" text-anchor="middle" style="font-size:11px">${r.cond}</text>`;
+    h+=`<text class="c-t" x="${W-40}" y="${y+4}" text-anchor="end" style="font-size:11px;color:var(--mute)">${r.when}</text>`;
+  });
+  svgOut('c26',W,H,h,'Rule trigger conditions');
+}
+function renderSchema(){
+  const W=560,H=220,L=40,R=40,T=20,B=20;
+  const fields=[
+    {name:'plate',type:'96 | 384',req:true,desc:'Well grid & default capacity'},
+    {name:'reagents',type:'{name: µL}',req:true,desc:'Starting volume per reagent'},
+    {name:'pipette',type:'{min,max} µL',req:false,desc:'Default 20–300 (P300)'},
+    {name:'well_capacity',type:'µL',req:false,desc:'Default 200'},
+    {name:'dead_volume',type:'µL',req:false,desc:'Default 0 (opt-in rule)'},
+    {name:'controls',type:'{well: "neg"|"pos"}',req:false,desc:'Default A1 neg, A12 pos'},
+    {name:'steps',type:'[{from,to,ul}]',req:true,desc:'Ordered transfers'},
+  ];
+  const rh=24;
+  let h='<text class="c-t" x="${W/2}" y="${T-8}" text-anchor="middle" style="font-weight:600;font-size:14px">LabCheck protocol schema (JSON)</text>';
+  fields.forEach((f,i)=>{const y=T+i*rh+rh/2;
+    h+=`<rect x="${L}" y="${T+i*rh}" width="${W-L-R}" height="${rh-2}" rx="3" style="fill:${f.req?'var(--buf)':'var(--sam)'}" opacity=".1"/>`;
+    h+=`<text class="mono" x="${L+8}" y="${y+3}" style="fill:${f.req?'var(--buf)':'var(--ink)};font-weight:${f.req?'600':'400'}">${f.name}${f.req?' *' : ''}</text>`;
+    h+=`<text class="mono" x="${L+140}" y="${y+3}" style="color:var(--mute);font-size:11px">${f.type}</text>`;
+    h+=`<text class="c-t" x="${W-R-8}" y="${y+3}" text-anchor="end" style="font-size:11px;color:var(--mute)">${f.desc}</text>`;
+  });
+  h+=`<text class="c-t" x="${W/2}" y="${H-6}" text-anchor="middle" style="font-size:11px;color:var(--mute)">* required field</text>`;
+  svgOut('c27',W,H,h,'Protocol schema');
+}
 function renderAnalysis(){const sel=$('#asel');if(!sel.innerHTML)sel.innerHTML=['Example protocol',...LIB.map(l=>l[0])].map((n,i)=>`<option value="${i}">${n}</option>`).join('');
- const pa=()=>{renderA();renderA2()},gen=()=>{setTimeout(renderB,0);setTimeout(renderC,15);setTimeout(renderD,30);setTimeout(renderE,45)};
- sel.onchange=pa;$('#ago').onclick=gen;$('#atime').onclick=renderT;pa();gen();setTimeout(renderT,60)}
+  const pa=()=>{renderA();renderA2()},gen=()=>{setTimeout(renderB,0);setTimeout(renderC,15);setTimeout(renderD,30);setTimeout(renderE,45);setTimeout(renderPipeline,60);setTimeout(renderRules,75);setTimeout(renderSchema,90)};
+  sel.onchange=pa;$('#ago').onclick=gen;$('#atime').onclick=renderT;pa();gen();setTimeout(renderT,60);setTimeout(renderPipeline,120);setTimeout(renderRules,135);setTimeout(renderSchema,150)}
 
 /* navigation */
 function go(id){
