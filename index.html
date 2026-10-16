@@ -417,6 +417,36 @@ steps:
 <figure class="full"><div id="c27"></div><figcaption>LabCheck protocol schema: plate (96/384), reagents {name: µL}, pipette {min,max}, well_capacity, dead_volume, controls {well: type}, steps [{from,to,ul}].</figcaption></figure>
 </div>
 
+<h2>Reagent usage waterfall</h2>
+<p>How much of each stock is consumed across the protocol. The waterfall shows cumulative usage per reagent.</p>
+<div class="charts">
+<figure class="full"><div id="c28"></div><figcaption>Waterfall: cumulative µL drawn from each reagent stock across all steps.</figcaption></figure>
+</div>
+
+<h2>Well capacity utilization</h2>
+<p>Heatmap showing how full each well gets as a percentage of its capacity. Red = over capacity.</p>
+<div class="charts">
+<figure class="full"><div id="c29"></div><figcaption>Well utilization heatmap: % of 200 µL capacity used per well. Red = overflow.</figcaption></figure>
+</div>
+
+<h2>Step volume timeline</h2>
+<p>Each step's volume colored by reagent, with pipette range band. Red dots exceed range.</p>
+<div class="charts">
+<figure class="full"><div id="c30"></div><figcaption>Step volume timeline: volume per step, color = reagent, grey band = pipette range.</figcaption></figure>
+</div>
+
+<h2>Error co-occurrence</h2>
+<p>When multiple errors are injected, which rule codes tend to appear together. Diagonal = marginal frequency.</p>
+<div class="charts">
+<figure class="full"><div id="c31"></div><figcaption>Error co-occurrence matrix: how often pairs of rule codes are reported together (3 errors injected).</figcaption></figure>
+</div>
+
+<h2>Protocol similarity</h2>
+<p>Pairwise similarity of generated protocols based on their step sequences (reagent + well + volume bucket).</p>
+<div class="charts">
+<figure class="full"><div id="c32"></div><figcaption>Protocol similarity matrix: Jaccard index on (reagent, well, volume bin) tuples.</figcaption></figure>
+</div>
+
 <h2>How fast is it?</h2>
 <p>Time to check one protocol of a given length. The test protocol has no errors, so this measures the bookkeeping and not the error reporting.</p>
 <div class="charts"><figure><div id="c8"></div><figcaption id="tsum"></figcaption></figure></div>
@@ -815,9 +845,77 @@ function renderSchema(){
   h+=`<text class="c-t" x="${W/2}" y="${H-6}" text-anchor="middle" style="font-size:11px;color:var(--mute)">* required field</text>`;
   svgOut('c27',W,H,h,'Protocol schema');
 }
+function renderWaterfall(){const i=+$('#asel').value,st=i?LIB[i-1][2]:FIXED,r=sim(st,DEF),fr=r.frames,n=fr.length,rs=Object.keys(S0);
+  const W=560,H=250,L=50,R=30,T=20,B=40,cum={buffer:0,sample:0,dye:0},steps=[{buffer:0,sample:0,dye:0}];
+  for(const f of fr){const c={...cum};c[f.r]=(c[f.r]||0)+f.v;cum=c;steps.push({...c})}
+  const ymax=Math.max(...Object.values(cum))*1.1,Y=v=>H-B-v/ymax*(H-T-B),X=s=>L+s/n*(W-L-R);
+  let h='';
+  for(let t=0;t<=4;t++){const v=ymax*t/4;h+=`<line class="c-grid" x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="c-t" x="${L-6}" y="${Y(v)+3}" text-anchor="end">${Math.round(v)}</text>}`}
+  rs.forEach((r,i)=>{const pts=steps.map((s,j)=>[X(j),Y(s[r]||0)]),color=colsR[r];
+    h+=`<polyline fill="none" stroke="${color}" stroke-width="2" points="${pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ')}"/>`;
+    h+=`<rect x="${L-40+i*80}" y="${T}" width="60" height="${Y(0)-Y(steps[n][r]||0)}" style="fill:${color}" opacity=".2"/>`;
+    h+=`<text class="c-t" x="${L-10+i*80}" y="${T-6}" text-anchor="end" style="fill:${color};font-weight:600">${r}: ${Math.round(steps[n][r]||0)} µL</text>`;
+  });
+  h+=`<line class="c-ax" x1="${L}" x2="${W-R}" y1="${H-B}" y2="${H-B}"/><line class="c-ax" x1="${L}" x2="${L}" y1="${T}" y2="${H-B}"/>`;
+  h+=`<text class="c-l" x="${(L+W-R)/2}" y="${H-4}" text-anchor="middle">step</text><text class="c-l" transform="translate(12 ${(T+H-B)/2}) rotate(-90)" text-anchor="middle">µL drawn</text>`;
+  svgOut('c28',W,H,h,'Reagent waterfall');
+}
+function renderUtilization(){const i=+$('#asel').value,st=i?LIB[i-1][2]:FIXED,r=sim(st,DEF),last=r.frames[r.frames.length-1];
+  const W=560,H=300,L=24,T=30,cw=(W-L-4)/12,ch=(H-T-4)/8;
+  let h='';
+  for(let c=0;c<12;c++)h+=`<text class="c-t" x="${(L+c*cw+cw/2).toFixed(1)}" y="${T-7}" text-anchor="middle">${c+1}</text>`;
+  for(let r=0;r<8;r++){h+=`<text class="c-t" x="${L-7}" y="${(T+r*ch+ch/2+3).toFixed(1)}" text-anchor="end">${ROWS[r]}</text>`;
+    for(let c=0;c<12;c++){const w=ROWS[r]+(c+1),o=last.wells[w],pct=o?o.v/DEF.cap*100:0,over=o&&o.v>DEF.cap,q=Math.min(1,pct/100);
+      const fill=over?'var(--fail)':`color-mix(in srgb,var(--ink) ${(q*85).toFixed(0)}%,transparent)`;
+      h+=`<rect x="${(L+c*cw+1).toFixed(1)}" y="${(T+r*ch+1).toFixed(1)}" width="${(cw-2).toFixed(1)}" height="${(ch-2).toFixed(1)}" style="fill:${fill}"><title>${w}: ${pct.toFixed(1)}%${over?' (OVER)':''}</title></rect>`;
+      h+=`<text class="c-t" x="${(L+c*cw+cw/2).toFixed(1)}" y="${(T+r*ch+ch/2+3).toFixed(1)}" text-anchor="middle" style="fill:${q>.5||over?'var(--paper)':'var(--ink)};font-size:10px">${over?'!':Math.round(pct)}</text>`;
+    }}
+  svgOut('c29',W,H,h,'Well utilization');
+}
+function renderTimeline(){const i=+$('#asel').value,st=i?LIB[i-1][2]:FIXED,r=sim(st,DEF),fr=r.frames,n=fr.length;
+  const W=560,H=200,L=50,R=30,T=20,B=40,vmax=Math.max(320,...fr.map(f=>f.v*1.1));
+  const X=s=>L+s/(n+1)*(W-L-R),Y=v=>H-B-v/vmax*(H-T-B);
+  let h='';
+  for(const t of [DEF.pmin,DEF.pmax])h+=`<line class="c-grid" x1="${L}" x2="${W-R}" y1="${Y(t)}" y2="${Y(t)}" style="stroke:var(--rule)" stroke-dasharray="2 2"/>`;
+  h+=`<rect x="${L}" y="${Y(DEF.pmax)}" width="${W-L-R}" height="${Y(DEF.pmin)-Y(DEF.pmax)}" style="fill:var(--rule)" opacity=".15"/>`;
+  fr.forEach((f,j)=>{const x=X(j+1),y=Y(f.v),color=colsR[f.r],bad=f.v<DEF.pmin||f.v>DEF.pmax;
+    h+=`<line x1="${x}" x2="${x}" y1="${Y(0)}" y2="${y}" style="stroke:${color}" stroke-width="3"/>`;
+    h+=`<circle cx="${x}" cy="${y}" r="${bad?5:3}" style="fill:${bad?'var(--fail)':color}"><title>Step ${f.i}: ${f.r} → ${f.w} ${f.v} µL${bad?' (OUT OF RANGE)':''}</title></circle>`;
+  });
+  for(let t=0;t<=4;t++){const v=vmax*t/4;h+=`<line class="c-grid" x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="c-t" x="${L-6}" y="${Y(v)+3}" text-anchor="end">${Math.round(v)}</text>}`}
+  for(let j=0;j<n;j+=Math.max(1,Math.floor(n/10)))h+=`<text class="c-t" x="${X(j+1)}" y="${H-B+14}" text-anchor="middle">${j+1}</text>`;
+  h+=`<line class="c-ax" x1="${L}" x2="${W-R}" y1="${H-B}" y2="${H-B}"/><line class="c-ax" x1="${L}" x2="${L}" y1="${T}" y2="${H-B}"/>`;
+  h+=`<text class="c-l" x="${(L+W-R)/2}" y="${H-4}" text-anchor="middle">step</text><text class="c-l" transform="translate(12 ${(T+H-B)/2}) rotate(-90)" text-anchor="middle">µL</text>`;
+  svgOut('c30',W,H,h,'Step volume timeline');
+}
+function renderCooccurrence(){const n=+$('#ansel').value||300,seed=+$('#aseed').value||7,b=bset(n,seed),rnd=prng(seed+101),order=['CONTROL_MISSING','PIPETTE_RANGE','WELL_OVERFLOW','WELL_MISSING','REAGENT_EMPTY'];
+  const co=SCOPE.map(()=>Array(5).fill(0)),marg=Array(5).fill(0);
+  for(let k=3;k<=3;k++){for(const base of b){const ch=[...order].sort(()=>rnd()-.5).slice(0,k).sort((x,y)=>order.indexOf(x)-order.indexOf(y));let st=base,cfg=GCFG;const tk=new Set();
+    for(const t of ch){const r=inject(t,st,cfg,rnd,tk);st=r.steps;cfg=r.cfg}
+    const cs=codesOf(st,cfg);SCOPE.forEach((a,i)=>{if(cs.has(a)){marg[i]++;SCOPE.forEach((c,j)=>{if(cs.has(c))co[i][j]++})}})}}
+  const W=560,H=300,L=100,T=30,ch=40;
+  let h='<text class="c-t" x="${L+200}" y="${T-10}" text-anchor="middle" style="font-weight:600;font-size:14px">Error co-occurrence (3 errors injected)</text>';
+  for(let i=0;i<5;i++){h+=`<text class="c-t" x="${L-8}" y="${T+i*ch+ch/2+3}" text-anchor="end" style="font-size:11px">${SCOPE[i].replace('_','\n')}</text>`;
+    h+=`<text class="c-t" x="${L+50+i*ch}" y="${T-6}" text-anchor="middle" style="font-size:11px">${SCOPE[i].replace('_','\n')}</text>`;}
+  for(let i=0;i<5;i++)for(let j=0;j<5;j++){const v=marg[i]?co[i][j]/marg[i]:0,q=Math.min(1,v);
+    h+=`<rect x="${L+j*ch}" y="${T+i*ch}" width="${ch}" height="${ch}" style="fill:color-mix(in srgb,var(--ink) ${(q*85).toFixed(0)}%,transparent)"><title>${SCOPE[i]} & ${SCOPE[j]}: ${(v*100).toFixed(1)}%</title></rect>`;
+    h+=`<text class="c-t" x="${L+j*ch+ch/2}" y="${T+i*ch+ch/2+3}" text-anchor="middle" style="fill:${q>.5?'var(--paper)':'var(--ink)};font-size:11px">${i===j?(marg[i]/n*100).toFixed(1)+'%':(v*100).toFixed(1)+'%'}</text>`;
+  }
+  svgOut('c31',W,H,h,'Error co-occurrence');
+}
+function renderSimilarity(){const n=Math.min(50,+$('#ansel').value||300),seed=+$('#aseed').value||7,bases=bset(n,seed);
+  const sig=b.map(s=>s.map(([,r,w,v])=>`${r}:${w}:${Math.floor(v/20)}`).sort().join('|'));
+  const sim=sig.map((_,i)=>sig.map((_,j)=>i===j?1:({a:new Set(sig[i].split('|')),b:new Set(sig[j].split('|')),u:0,i:0}=>({u:(a=[...a].filter(x=>b.has(x)).length),i:a.length+b.length-a.length}))(a,b,u,i).u/(a+b-u)||0)));
+  const W=560,H=560,L=40,T=40,cw=(W-L-4)/n;
+  let h='';
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++){const v=sim[i][j],q=v;
+    h+=`<rect x="${L+j*cw}" y="${T+i*cw}" width="${cw}" height="${cw}" style="fill:color-mix(in srgb,var(--buf) ${(q*80).toFixed(0)}%,transparent)"></rect>`;
+  }
+  svgOut('c32',W,H,h,'Protocol similarity');
+}
 function renderAnalysis(){const sel=$('#asel');if(!sel.innerHTML)sel.innerHTML=['Example protocol',...LIB.map(l=>l[0])].map((n,i)=>`<option value="${i}">${n}</option>`).join('');
-  const pa=()=>{renderA();renderA2()},gen=()=>{setTimeout(renderB,0);setTimeout(renderC,15);setTimeout(renderD,30);setTimeout(renderE,45);setTimeout(renderPipeline,60);setTimeout(renderRules,75);setTimeout(renderSchema,90)};
-  sel.onchange=pa;$('#ago').onclick=gen;$('#atime').onclick=renderT;pa();gen();setTimeout(renderT,60);setTimeout(renderPipeline,120);setTimeout(renderRules,135);setTimeout(renderSchema,150)}
+  const pa=()=>{renderA();renderA2();renderWaterfall();renderUtilization();renderTimeline()},gen=()=>{setTimeout(renderB,0);setTimeout(renderC,15);setTimeout(renderD,30);setTimeout(renderE,45);setTimeout(renderPipeline,60);setTimeout(renderRules,75);setTimeout(renderSchema,90);setTimeout(renderCooccurrence,105);setTimeout(renderSimilarity,120)};
+  sel.onchange=pa;$('#ago').onclick=gen;$('#atime').onclick=renderT;pa();gen();setTimeout(renderT,60);setTimeout(renderPipeline,120);setTimeout(renderRules,135);setTimeout(renderSchema,150);setTimeout(renderCooccurrence,165);setTimeout(renderSimilarity,180)}
 
 /* navigation */
 function go(id){
