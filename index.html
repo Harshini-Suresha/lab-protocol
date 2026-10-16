@@ -184,6 +184,7 @@ steps:
 <p>Error injection: start from valid generated protocols, inject one known mistake per protocol, measure whether the corresponding rule fires. Two injection types (WRONG_REAGENT, WRONG_WELL) have no dedicated rule—any detection is incidental.</p>
 <p>Benchmark generation: 8–24 steps, 3 reagents (buffer 4000µL, sample 800µL, dye 400µL), random well/reagent/volume respecting all constraints.</p>
 <p>Metrics: detection rate per error type (Wilson 95% CI), multi-error detection (all injected codes reported), false alarm rate on clean protocols, timing.</p>
+<p>Real-protocol panel: four transcribed OT-2 protocols (serial-dilution subset and full run, restriction digest, PCR distribution) with the libraries' own volumes, labware and pipettes, checked as transcribed — any report counts as a false alarm on real data. Retrospective: two shipped library faults — the 649b67 example input overdraw (caught: <code>REAGENT_EMPTY</code>) and the 052d03 diluent-planning fix (miss: reservoir-well planning has no rule yet). Sources and transcription notes are on the <a href="#" data-go="data">data page</a>.</p>
 
 <h2>Statistical methods</h2>
 <p>Rates are binomial proportions (caught / n). Intervals are Wilson score intervals at 95% (z = 1.96):</p>
@@ -200,6 +201,7 @@ steps:
 <li><b>Fault realism.</b> Faults are synthesised by someone who knows the rules. A mistyped well that lands on another valid well (no rule) is under-represented relative to real typos.</li>
 <li><b>Single-fault bias.</b> Real protocols can carry several faults; multi-error runs are covered but only up to five, all of distinct types.</li>
 <li><b>Oracle problem.</b> There is no independent oracle: the generator guarantees validity by construction, so "false alarms on clean protocols" tests the generator as much as the checker.</li>
+<li><b>Transcription fidelity.</b> The real protocols are hand-transcribed subsets: well-to-well serial transfers are outside LabCheck v1's reagent → well model, per-sample tube identities are collapsed into one stock, and a two-pipette run is modelled as one combined range. Each approximation is documented on the data page, but a mistranscription would look exactly like a false alarm or a miss.</li>
 <li><b>Browser timing.</b> Millisecond timings depend on the machine and tab state; treat them as order-of-magnitude.</li></ul>
 
 <h2>What it will not catch</h2>
@@ -210,7 +212,7 @@ steps:
 <section data-p="results"><div class="wide">
 <div class="col" style="margin:0;padding:0"><h1>Results</h1>
 <p class="sub">What the checker catches in generated protocols.</p>
-<p><b>Don't quote these yet.</b> The protocols come from a random generator, not from real experiments, and a script that knows the rules adds the errors. Good numbers on the first five rows only show the code works. They say nothing about real protocols. That test comes after week 4.</p></div>
+<p><b>Two evaluations.</b> The verdicts that matter are the two real-data panels below: valid OT-2 protocols that must pass, and shipped library faults that must (or demonstrably cannot yet) be caught. The injection benchmark further down is synthetic by design — regression tests for code correctness, not field performance: random-generator protocols with script-injected errors.</p></div>
 <div class="row" style="margin:18px 0 0"><label class="mono">seed <input id="seed" type="number" value="7"></label><label class="mono">protocols <select id="nsel"><option>100</option><option selected>300</option><option>1000</option></select></label><button class="b" id="go">Run</button></div>
 <h2>One error at a time</h2>
 <p>Each protocol gets one mistake. "Caught" means the checker reported that rule's code. For the two rows with no rule, it means the checker reported anything.</p>
@@ -226,8 +228,16 @@ steps:
 <p id="tD"></p>
 <div class="hist" id="hist"></div><div class="axisrow"></div>
 <p id="fp" class="mono"></p>
+<h2>Real protocols</h2>
+<p>The four transcribed real OT-2 protocols from the <a href="#" data-go="data">data page</a>, checked as transcribed with their own pipette ranges and well limits. They are valid runs, so they should all pass — any report here is a false alarm on real data.</p>
+<div class="tw"><table><thead><tr><th>Protocol</th><th class="num">Steps</th><th>Result</th></tr></thead><tbody id="tReal"></tbody></table></div>
+<p id="realfp" class="mono"></p>
+<h2>Real faults from library history</h2>
+<p>Shipped faults found by lab users (<a href="#" data-go="data">sources on the data page</a>), not injected by me. H1 is a fault inside the checker's scope; H2 is outside it — reservoir-well planning has no rule yet — and is counted as a miss so the gap stays visible.</p>
+<div class="tw"><table><thead><tr><th>Case</th><th>Expected</th><th>LabCheck</th><th>Verdict</th></tr></thead><tbody id="tRetro"></tbody></table></div>
+<p id="retrofp" class="mono"></p>
 <h2>Still to do</h2>
-<p class="todo">After week 4: protocols from real experiments, error types chosen by someone other than me, and a list of misses with the reason for each.</p>
+<p class="todo">Partly done: four transcribed valid OT-2 protocols, one shipped fault caught, one scoped miss. Still to do: a second in-scope historical fault, error types chosen by someone other than me, and running the checker prospectively on new protocols before they run.</p>
 </div></section>
 
 <section data-p="data"><div class="wide">
@@ -236,15 +246,23 @@ steps:
 <h2>Sample protocols</h2>
 <p>Nine small protocols I wrote by hand. The checker runs on each when you open this page, so the result column isn't typed in. "Open in Build" loads one into the builder.</p>
 <div class="tw"><table><thead><tr><th>#</th><th>Protocol</th><th class="num">Steps</th><th class="num">µL moved</th><th class="num">Wells</th><th>Result</th><th></th></tr></thead><tbody id="lib"></tbody></table></div>
+<h2>Real protocols</h2>
+<p>Four subsets transcribed from published, experimentally validated OT-2 protocols in the <a href="https://github.com/Opentrons/Protocols" target="_blank" rel="noopener">Opentrons Protocol Library</a>. Volumes, labware and pipettes are the libraries' own defaults — not my invention. The checker runs on each when you open this page, so the result column isn't typed in. "Open in Try it" loads the full JSON (with its real pipette range and well limit) into the validator.</p>
+<div class="tw"><table><thead><tr><th>#</th><th>Protocol</th><th class="num">Steps</th><th class="num">µL moved</th><th class="num">Wells</th><th>Result</th><th></th></tr></thead><tbody id="reallib"></tbody></table></div>
+<p style="color:var(--mute);font-size:15.5px">Transcription notes. LabCheck v1 models only reagent → well dispenses on one plate with one pipette range, so each entry is the reagent → well phase of its source: (1) serial dilution keeps the robot's 100 µL diluent distribution (R1: first 6 wells, R4: all 88 wells of columns 2–12); the 50 µL well-to-well serial transfers are out of scope and noted as a limitation. (2) restriction digest collapses per-sample DNA tubes and the three enzymes each into one stock but keeps every real per-well volume and the real transfer order (water → buffer → sample → enzyme); the real run splits volumes across a P20 (≤20 µL) and a P300 (>20 µL), modelled here as their combined 1–300 µL envelope. (3) PCR distribution is exact at defaults. (4) the 649b67 fault case models the 6-well plate as a 96 grid (B3 is a valid name in both) with the real 16.8 mL well limit. None of the sources declares control wells, so <code>controls</code> is <code>{}</code> and the control rule is not evaluated for them.</p>
+<h2>Real faults from library history</h2>
+<p>Shipped protocol versions and example inputs from the Protocol Library's own history — faults found by lab users, not injected by me. Expected verdict and live result side by side; H2 is a miss by scope and says so.</p>
+<div class="tw"><table><thead><tr><th>#</th><th>Case</th><th class="num">Steps</th><th class="num">µL moved</th><th>Expected</th><th>LabCheck</th><th>Verdict</th><th></th></tr></thead><tbody id="retrolib"></tbody></table></div>
 <h2>Pipettes</h2>
-<p>Single-channel ranges for the Opentrons OT-2 GEN2 pipettes. The checker's default 20–300 µL range comes from the P300.</p>
+<p>Single-channel ranges for the Opentrons OT-2 GEN2 pipettes, from <a href="https://opentrons.com/pipettes" target="_blank" rel="noopener">Opentrons' pipette specifications</a> (also in each protocol's <code>fields.json</code>). The checker's default 20–300 µL range comes from the P300.</p>
 <div class="tw"><table><thead><tr><th>Pipette</th><th class="num">Min µL</th><th class="num">Max µL</th></tr></thead><tbody>
 <tr><td>P20</td><td class="num">1</td><td class="num">20</td></tr><tr><td>P300</td><td class="num">20</td><td class="num">300</td></tr><tr><td>P1000</td><td class="num">100</td><td class="num">1000</td></tr></tbody></table></div>
 <h2>Plates</h2>
-<p>Well volumes depend on the manufacturer and the well shape, so these are rough. The demo here uses 200 µL as the well limit. For a real plate, use its datasheet.</p>
-<div class="tw"><table><thead><tr><th>Format</th><th>Rows</th><th>Columns</th><th class="num">Wells</th><th class="num">Typical max µL per well</th></tr></thead><tbody>
-<tr><td>96-well</td><td>A–H (8)</td><td>1–12</td><td class="num">96</td><td class="num">about 360</td></tr>
-<tr><td>384-well</td><td>A–P (16)</td><td>1–24</td><td class="num">384</td><td class="num">about 110</td></tr></tbody></table></div>
+<p>Well maxima from labware definitions and manufacturer datasheets — not guesses. The demo default of 200 µL is the <a href="https://labware.opentrons.com/nest_96_wellplate_200ul_flat" target="_blank" rel="noopener">NEST 96-well 200 µL flat</a> (Opentrons Labware Library). The 96-well 360 µL figure is the <a href="https://ecatalog.corning.com/life-sciences/b2c/US/en/Microplates/Assay-Microplates/96-Well-Microplates/Corning%C2%AE-96-well-Clear-Polystyrene-Microplates/p/3997" target="_blank" rel="noopener">Corning 3997 flat-bottom plate</a> (360 µL total, 75–200 µL working volume). The 384-well 112 µL figure is the <a href="https://labware.opentrons.com/corning_384_wellplate_112ul_flat" target="_blank" rel="noopener">Corning 384-well flat</a> (Opentrons Labware Library). For any other plate, use its datasheet.</p>
+<div class="tw"><table><thead><tr><th>Format</th><th>Rows</th><th>Columns</th><th class="num">Wells</th><th class="num">Max µL per well</th></tr></thead><tbody>
+<tr><td>96-well (NEST 200 µL flat)</td><td>A–H (8)</td><td>1–12</td><td class="num">96</td><td class="num">200</td></tr>
+<tr><td>96-well (Corning 360 µL flat)</td><td>A–H (8)</td><td>1–12</td><td class="num">96</td><td class="num">360</td></tr>
+<tr><td>384-well (Corning 112 µL flat)</td><td>A–P (16)</td><td>1–24</td><td class="num">384</td><td class="num">112</td></tr></tbody></table></div>
 </div></section>
 
 <section data-p="report"><div class="col">
@@ -319,7 +337,7 @@ steps:
 </ul>
 
 <h2>Evaluation</h2>
-<p>Error injection gives a detection rate for each error type, and clean protocols give the false alarm count. Full results with 95% Wilson intervals are on the <a href="#" data-go="results">results page</a>. Visualizations of detection rates, timing, and limit sensitivity are on the <a href="#" data-go="analysis">analysis page</a>.</p>
+<p>Error injection gives a detection rate for each error type, and clean protocols give the false alarm count. Full results with 95% Wilson intervals are on the <a href="#" data-go="results">results page</a>. Visualizations of detection rates, timing, and limit sensitivity are on the <a href="#" data-go="analysis">analysis page</a>. The real-data evaluation transcribes published OT-2 protocols and shipped library faults: four valid protocols with zero false alarms, one in-scope historical fault caught, one out-of-scope miss kept visible; sources and transcription notes are on the <a href="#" data-go="data">data page</a>.</p>
 
 <h2>Limitations</h2>
 <p>The checker only finds what its rules describe. It doesn't model liquid properties (viscosity, evaporation, foaming), deck layout (tip rack positions, labware coordinates, collisions), timing (incubation, settling), or biology (whether the assay design makes sense). A pass only means the protocol is internally consistent with respect to the six rules—nothing more.</p>
@@ -335,6 +353,7 @@ steps:
 <tr><td>14 Oct 2026</td><td>Project page published. Browser reference checker, simulator, builder and validator working. Python implementation not started.</td></tr>
 <tr><td>15 Oct 2026</td><td>Added sample protocols, reference tables, a benchmark on generated protocols (seven kinds of error), and an analysis page with charts and timing.</td></tr>
 <tr><td>16 Oct 2026</td><td>Expanded report with full methodology, protocol schema, simulation algorithm, all six rules with trigger conditions and message templates, error injection procedures, benchmark generation details, and limitations.</td></tr>
+<tr><td>16 Oct 2026</td><td>Real-data evaluation: 4 transcribed valid OT-2 protocols (0 false alarms), retrospective on library history — 649b67 shipped example-input overdraw caught, 052d03 diluent-planning fix missed (no reservoir rule; kept as visible miss). Synthetic injection repositioned as regression tests.</td></tr>
 </tbody></table></div>
 </div></section>
 
@@ -386,7 +405,7 @@ steps:
 <p class="sub">Charts drawn in your browser by the same checker.</p></div>
 
 <h2>One protocol</h2>
-<p>Pick a protocol to see what it does to the reagents and the plate. The example is the one on the home page and the others are on the Data page.</p>
+<p>Pick a protocol to see what it does to the reagents and the plate. The example is the one on the home page and the others are on the Data page — including three transcribed real OT-2 protocols with their own pipettes, plates and well limits.</p>
 <div class="row" style="margin:6px 0 0"><label class="mono">protocol <select id="asel"></select></label></div>
 <div class="charts">
 <figure class="full"><div id="c9"></div><figcaption>Where the liquid goes. Each band is one reagent going into one well, and its width is the volume.</figcaption></figure>
@@ -453,7 +472,7 @@ steps:
 <h2>Well capacity utilization</h2>
 <p>Heatmap showing how full each well gets as a percentage of its capacity. Red = over capacity.</p>
 <div class="charts">
-<figure class="full"><div id="c29"></div><figcaption>Well utilization heatmap: % of 200 µL capacity used per well. Red = overflow.</figcaption></figure>
+<figure class="full"><div id="c29"></div><figcaption>Well utilization heatmap: % of that protocol's well capacity used per well. Red = overflow.</figcaption></figure>
 </div>
 
 <h2>Step volume timeline</h2>
@@ -737,6 +756,31 @@ const LIB=[
 ['Lowercase well','b1 instead of B1',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'buffer','b1',50]]],
 ['Column zero','A0 does not exist',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'buffer','A0',50]]],
 ['Full column','A1, A12 plus 80 µL down column 6',[[1,'buffer','A1',100],[2,'sample','A12',50],[3,'buffer','A6',80],[4,'buffer','B6',80],[5,'buffer','C6',80],[6,'buffer','D6',80],[7,'buffer','E6',80],[8,'buffer','F6',80],[9,'buffer','G6',80],[10,'buffer','H6',80]]]];
+/* real transcribed protocols (Opentrons Protocol Library; volumes/labware/pipettes are library defaults) */
+const REAL=[
+['OT-2 serial dilution — diluent phase','Opentrons Protocol Library: <a href="https://github.com/Opentrons/Protocols/tree/develop/protocols/customizable_serial_dilution_ot2" target="_blank" rel="noopener">customizable_serial_dilution_ot2</a>. Defaults 1:3 / 150 µL mix → 100 µL diluent per well. NEST 96-well 200 µL flat, P300 Single GEN2. Well-to-well 50 µL serial transfers out of scope (see note).',
+{plate:96,reagents:{diluent:15000},pipette:{min:20,max:300},well_capacity:200,dead_volume:0,controls:{},steps:[{from:'diluent',to:'A2',ul:100},{from:'diluent',to:'B2',ul:100},{from:'diluent',to:'C2',ul:100},{from:'diluent',to:'D2',ul:100},{from:'diluent',to:'E2',ul:100},{from:'diluent',to:'F2',ul:100}]}],
+['OT-2 restriction digest — 12 reactions','Opentrons Protocol Library: <a href="https://github.com/Opentrons/Protocols/tree/develop/protocols/010526" target="_blank" rel="noopener">010526</a>. Full example CSV (2–12 µL sample + 23–33 µL water + 4 µL 10x buffer + 2 µL per enzyme; double enzymes on A7–A12). NEST 96-well 100 µL PCR. Real run splits P20 (≤20 µL) / P300 (>20 µL), modelled as 1–300 envelope.',
+{plate:96,reagents:{water:5000,buffer_10x:200,sample_DNA:500,enzyme:200},pipette:{min:1,max:300},well_capacity:100,dead_volume:0,controls:{},steps:[{from:'water',to:'A1',ul:33},{from:'buffer_10x',to:'A1',ul:4},{from:'sample_DNA',to:'A1',ul:2},{from:'enzyme',to:'A1',ul:2},{from:'water',to:'A2',ul:32},{from:'buffer_10x',to:'A2',ul:4},{from:'sample_DNA',to:'A2',ul:3},{from:'enzyme',to:'A2',ul:2},{from:'water',to:'A3',ul:31},{from:'buffer_10x',to:'A3',ul:4},{from:'sample_DNA',to:'A3',ul:4},{from:'enzyme',to:'A3',ul:2},{from:'water',to:'A4',ul:29},{from:'buffer_10x',to:'A4',ul:4},{from:'sample_DNA',to:'A4',ul:6},{from:'enzyme',to:'A4',ul:2},{from:'water',to:'A5',ul:30},{from:'buffer_10x',to:'A5',ul:4},{from:'sample_DNA',to:'A5',ul:5},{from:'enzyme',to:'A5',ul:2},{from:'water',to:'A6',ul:30},{from:'buffer_10x',to:'A6',ul:4},{from:'sample_DNA',to:'A6',ul:5},{from:'enzyme',to:'A6',ul:2},{from:'water',to:'A7',ul:30},{from:'buffer_10x',to:'A7',ul:4},{from:'sample_DNA',to:'A7',ul:5},{from:'enzyme',to:'A7',ul:2},{from:'enzyme',to:'A7',ul:2},{from:'water',to:'A8',ul:30},{from:'buffer_10x',to:'A8',ul:4},{from:'sample_DNA',to:'A8',ul:5},{from:'enzyme',to:'A8',ul:2},{from:'enzyme',to:'A8',ul:2},{from:'water',to:'A9',ul:32},{from:'buffer_10x',to:'A9',ul:4},{from:'sample_DNA',to:'A9',ul:3},{from:'enzyme',to:'A9',ul:2},{from:'enzyme',to:'A9',ul:2},{from:'water',to:'A10',ul:23},{from:'buffer_10x',to:'A10',ul:4},{from:'sample_DNA',to:'A10',ul:12},{from:'enzyme',to:'A10',ul:2},{from:'enzyme',to:'A10',ul:2},{from:'water',to:'A11',ul:31},{from:'buffer_10x',to:'A11',ul:4},{from:'sample_DNA',to:'A11',ul:4},{from:'enzyme',to:'A11',ul:2},{from:'enzyme',to:'A11',ul:2},{from:'water',to:'A12',ul:32},{from:'buffer_10x',to:'A12',ul:4},{from:'sample_DNA',to:'A12',ul:3},{from:'enzyme',to:'A12',ul:2},{from:'enzyme',to:'A12',ul:2}]}],
+['OT-2 PCR distribution — 4 wells','Opentrons Protocol Library: <a href="https://github.com/Opentrons/Protocols/tree/develop/protocols/generic_pcr_prep_2" target="_blank" rel="noopener">generic_pcr_prep_2</a>. Defaults 18 µL mastermix + 2 µL DNA per well. Corning 384-well 112 µL flat, P20 Multi GEN2.',
+{plate:384,reagents:{mastermix:15000,template_DNA:500},pipette:{min:1,max:20},well_capacity:112,dead_volume:0,controls:{},steps:[{from:'mastermix',to:'A1',ul:18},{from:'template_DNA',to:'A1',ul:2},{from:'mastermix',to:'B1',ul:18},{from:'template_DNA',to:'B1',ul:2},{from:'mastermix',to:'C1',ul:18},{from:'template_DNA',to:'C1',ul:2},{from:'mastermix',to:'D1',ul:18},{from:'template_DNA',to:'D1',ul:2}]}],
+['OT-2 serial dilution — full default run','Same source as R1, full default run: 100 µL diluent into all 88 wells of columns 2–12 (11 dilutions, single-channel layout; steps generated from that rule, listed explicitly in Try it). 8800 µL from a 15 mL reservoir. NEST 200 µL flat, P300 Single GEN2.',
+{plate:96,reagents:{diluent:15000},pipette:{min:20,max:300},well_capacity:200,dead_volume:0,controls:{},steps:(()=>{const s=[];for(let c=2;c<=12;c++)for(const r of 'ABCDEFGH')s.push({from:'diluent',to:r+c,ul:100});return s})()}]];
+/* real faults from Protocol Library history: shipped inputs/versions, before the fix */
+const RETRO=[
+['Shipped example input draws 400 µL from a 100 µL source','Opentrons Protocol Library: <a href="https://github.com/Opentrons/Protocols/tree/develop/protocols/649b67" target="_blank" rel="noopener">649b67</a> (Advanced cherrypicking). The published <code>fields.json</code> example input sends step 7: 400 µL from 2 mL tube A1 holding 100 µL into 6-well B3. P1000 Single GEN2 (100–1000), Corning 3516 6-well (16.8 mL/well, Corning catalog). The protocol\u2019s own check is dest-side only and passes this; LabCheck checks the source side too.','REAGENT_EMPTY',
+{plate:96,reagents:{screwcap_A1:100},pipette:{min:100,max:1000},well_capacity:16800,dead_volume:0,controls:{},steps:[{from:'screwcap_A1',to:'B3',ul:400}]}],
+['Diluent planned across too few reservoir wells','Opentrons Protocol Library: <a href="https://github.com/Opentrons/Protocols/tree/develop/protocols/052d03" target="_blank" rel="noopener">052d03</a>, <a href="https://github.com/Opentrons/Protocols/issues/4891" target="_blank" rel="noopener">issue #4891</a> (“update diluent liquid total to prevent overflow”: 3 reservoir wells × 13.5 mL tracked as 12 mL usable → spread over up to 4 wells). Transfer phase shown (3× 180 µL first-dilution dispenses, P300 Multi GEN2, Bio-Rad 200 µL PCR). Reservoir-well planning has no LabCheck rule, so the transfer phase passes: a miss by scope, and the reason for a future rule.','miss (no rule)',
+{plate:96,reagents:{diluent:40500},pipette:{min:20,max:300},well_capacity:200,dead_volume:0,controls:{},steps:[{from:'diluent',to:'A1',ul:180},{from:'diluent',to:'A5',ul:180},{from:'diluent',to:'A9',ul:180}]}]];
+function renderRetro(){$('#retrolib').innerHTML=RETRO.map((e,i)=>{const pr=e[3],st=protoSteps(pr),cs=[...new Set(codesOf(st,protoCfg(pr)))],ul=st.reduce((a,x)=>a+x[3],0);
+  const caught=e[2]==='miss (no rule)'?!cs.length:cs.includes(e[2]);
+  return`<tr><td>H${i+1}</td><td>${e[0]}<br><span style="color:var(--mute)">${e[1]}</span></td><td class="num">${st.length}</td><td class="num">${ul}</td><td><code>${e[2]}</code></td><td class="${cs.length?'bad':'ok'}">${cs.length?cs.join('<br>'):'pass'}</td><td class="${caught?'ok':'bad'}">${caught?(e[2]==='miss (no rule)'?'miss (as scoped)':'caught'):'NOT CAUGHT'}</td><td><button class="b" data-retro="${i}">Open in Try it</button></td></tr>`}).join('');
+  $$('#retrolib [data-retro]').forEach(b=>b.onclick=()=>{$('#vin').value=fmt(RETRO[+b.dataset.retro][3]);go('validate');vrun()})}
+const protoSteps=p=>p.steps.map((s,i)=>[i+1,s.from,String(s.to).toUpperCase(),s.ul]);
+const protoCfg=p=>({stock:{...p.reagents},pmin:p.pipette?.min??20,pmax:p.pipette?.max??300,cap:p.well_capacity??200,dead:+(p.dead_volume||0),rows:(p.plate||96)===96?'ABCDEFGH':'ABCDEFGHIJKLMNOP',cols:(p.plate||96)===96?12:24,ctrl:p.controls||{}});
+function renderReal(){$('#reallib').innerHTML=REAL.map((e,i)=>{const pr=e[2],st=protoSteps(pr),cs=[...new Set(codesOf(st,protoCfg(pr)))],ul=st.reduce((a,x)=>a+x[3],0),w=new Set(st.map(x=>x[2])).size;
+  return`<tr><td>R${i+1}</td><td>${e[0]}<br><span style="color:var(--mute)">${e[1]}</span></td><td class="num">${st.length}</td><td class="num">${ul}</td><td class="num">${w}</td><td class="${cs.length?'bad':'ok'}">${cs.length?cs.join('<br>'):'pass'}</td><td><button class="b" data-real="${i}">Open in Try it</button></td></tr>`}).join('');
+  $$('#reallib [data-real]').forEach(b=>b.onclick=()=>{$('#vin').value=fmt(REAL[+b.dataset.real][2]);go('validate');vrun()})}
 function renderLib(){$('#lib').innerHTML=LIB.map(([n,d,st],i)=>{const cs=[...new Set(codesOf(st,DEF))],ul=st.reduce((a,x)=>a+x[3],0),w=new Set(st.map(x=>x[2]).filter(isWell)).size;
  return`<tr><td>${i+1}</td><td>${n}<br><span style="color:var(--mute)">${d}</span></td><td class="num">${st.length}</td><td class="num">${ul}</td><td class="num">${w}</td><td class="${cs.length?'bad':'ok'}">${cs.length?cs.join('<br>'):'pass'}</td><td><button class="b" data-lib="${i}">Open in Build</button></td></tr>`}).join('');
  $$('#lib [data-lib]').forEach(b=>b.onclick=()=>{bsteps=LIB[b.dataset.lib][2].map(x=>x.slice());go('build')})}
@@ -779,7 +823,15 @@ function runBench(){const n=+$('#nsel').value||300,b=bench2(n,+$('#seed').value|
  const ks=[...Array(17)].map((_,i)=>8+i),mx=Math.max(...ks.map(x=>b.sizes[x]||0))||1;
  $('#tD').textContent=`${b.n} generated protocols, seed ${+$('#seed').value||7}. Average ${b.meanSteps.toFixed(1)} steps and ${Math.round(b.meanUl)} µL moved. Steps per protocol:`;
  $('#hist').innerHTML=ks.map(x=>`<div style="height:${100*(b.sizes[x]||0)/mx}%" title="${x} steps: ${b.sizes[x]||0}"><span>${x%2?'':x}</span></div>`).join('');
- $('#fp').textContent=`False alarms on the unmodified protocols: ${b.fp} of ${b.n}.`}
+  $('#fp').textContent=`False alarms on the unmodified protocols: ${b.fp} of ${b.n}.`;
+  const rq=REAL.map(p=>{const pr=p[2],st=protoSteps(pr),cs=[...new Set(codesOf(st,protoCfg(pr)))];return{n:p[0],s:st.length,cs}});
+  $('#tReal').innerHTML=rq.map(r=>`<tr><td>${r.n}</td><td class="num">${r.s}</td><td class="${r.cs.length?'bad':'ok'}">${r.cs.length?r.cs.join('<br>'):'pass'}</td></tr>`).join('');
+  $('#realfp').textContent=`False alarms on real transcribed protocols: ${rq.filter(r=>r.cs.length).length} of ${rq.length}.`;
+  const rt=RETRO.map(p=>{const pr=p[3],st=protoSteps(pr),cs=[...new Set(codesOf(st,protoCfg(pr)))];return{n:p[0],e:p[2],s:st.length,cs}});
+  $('#tRetro').innerHTML=rt.map(r=>{const caught=r.e==='miss (no rule)'?!r.cs.length:r.cs.includes(r.e);
+   return`<tr><td>${r.n}</td><td><code>${r.e}</code></td><td class="${r.cs.length?'bad':'ok'}">${r.cs.length?r.cs.join('<br>'):'pass'}</td><td class="${caught?'ok':'bad'}">${caught?(r.e==='miss (no rule)'?'miss (as scoped)':'caught'):'NOT CAUGHT'}</td></tr>`}).join('');
+  const scoped=rt.filter(r=>r.e!=='miss (no rule)'),hit=scoped.filter(r=>r.cs.includes(r.e)).length;
+  $('#retrofp').textContent=`Library history: ${hit} of ${scoped.length} in-scope real faults caught; ${rt.length-scoped.length} out-of-scope miss (no reservoir rule).`}
 $('#go').onclick=runBench;
 
 /* motion */
@@ -823,14 +875,15 @@ function heat(id,m,mx){const W=560,H=280,L=24,T=22,cw=(W-L-4)/12,ch=(H-T-4)/8;le
  for(let r=0;r<8;r++){h+=`<text class="c-t" x="${L-7}" y="${(T+r*ch+ch/2+3).toFixed(1)}" text-anchor="end">${ROWS[r]}</text>`;
   for(let c=0;c<12;c++){const v=m[r][c],q=Math.min(1,v/mx);h+=`<rect x="${(L+c*cw+1).toFixed(1)}" y="${(T+r*ch+1).toFixed(1)}" width="${(cw-2).toFixed(1)}" height="${(ch-2).toFixed(1)}" style="fill:color-mix(in srgb,var(--ink) ${(q*85).toFixed(0)}%,transparent)"><title>${ROWS[r]}${c+1}: ${v.toFixed(1)} µL average</title></rect><text class="c-t" x="${(L+c*cw+cw/2).toFixed(1)}" y="${(T+r*ch+ch/2+3).toFixed(1)}" text-anchor="middle" style="fill:${q>.5?'var(--paper)':'var(--ink)'}">${Math.round(v)}</text>`}}
  $('#'+id).innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Average volume per well">${h}</svg>`}
-function renderA(){const i=+$('#asel').value,st=i?LIB[i-1][2]:FIXED,r=sim(st,DEF),fr=r.frames,n=fr.length,cols={buffer:'var(--buf)',sample:'var(--sam)',dye:'var(--dye)'};
- const ser=Object.keys(S0).map(k=>({name:k,color:cols[k],pts:[[0,100],...fr.map((f,j)=>[j+1,f.stock[k]/S0[k]*100])]}));
- const lo=Math.min(0,...ser.flatMap(s=>s.pts.map(p=>p[1])));
- lineChart('c1',{title:'Reagent left after each step',series:ser,xmin:0,xmax:Math.max(n,1),ymin:Math.floor(lo/25)*25,ymax:100,yfmt:fmtp,xfmt:v=>Math.round(v),xticks:n<=12?[...Array(n+1).keys()]:null,hlines:[{y:0,label:'empty'}],xlab:'after step',ylab:'% of starting volume'});
- const last=fr[n-1],ws=Object.entries(last.wells).sort((a,b)=>a[0][0].localeCompare(b[0][0])||(+a[0].slice(1))-(+b[0].slice(1)));
- barChart('c2',{title:'Liquid in each well',bars:ws.map(([w,o])=>({label:w,v:o.v,color:o.v>DEF.cap?'var(--fail)':`rgb(${o.c.map(x=>Math.round(x/o.v)).join(',')})`})),ymax:Math.max(DEF.cap*1.15,...ws.map(x=>x[1].v*1.05)),hline:{y:DEF.cap,label:'well limit'},ylab:'µL'});
- const vmax=Math.max(320,...fr.map(f=>f.v*1.1));
- lineChart('c3',{title:'Transfer sizes',series:[{color:'var(--ink)',line:false,dots:true,pts:fr.map((f,j)=>[j+1,f.v,(f.v<DEF.pmin||f.v>DEF.pmax)?'var(--fail)':'var(--ink)'])}],xmin:0,xmax:n+1,ymin:0,ymax:vmax,band:[DEF.pmin,DEF.pmax],yfmt:v=>Math.round(v),xfmt:v=>Math.round(v),xticks:n<=12?[...Array(n).keys()].map(x=>x+1):null,xlab:'step',ylab:'µL'})}
+function aProto(i){if(!i)return{steps:FIXED,cfg:DEF};if(i<=LIB.length)return{steps:LIB[i-1][2],cfg:DEF};const p=REAL[i-1-LIB.length][2];return{steps:protoSteps(p),cfg:protoCfg(p)}}
+function renderA(){const ap=aProto(+$('#asel').value),st=ap.steps,cfg=ap.cfg,r=sim(st,cfg),fr=r.frames,n=fr.length,cols={buffer:'var(--buf)',sample:'var(--sam)',dye:'var(--dye)'};
+  const ser=Object.keys(cfg.stock).map(k=>({name:k,color:cols[k]||'var(--ink)',pts:[[0,100],...fr.map((f,j)=>[j+1,f.stock[k]/cfg.stock[k]*100])]}));
+  const lo=Math.min(0,...ser.flatMap(s=>s.pts.map(p=>p[1])));
+  lineChart('c1',{title:'Reagent left after each step',series:ser,xmin:0,xmax:Math.max(n,1),ymin:Math.floor(lo/25)*25,ymax:100,yfmt:fmtp,xfmt:v=>Math.round(v),xticks:n<=12?[...Array(n+1).keys()]:null,hlines:[{y:0,label:'empty'}],xlab:'after step',ylab:'% of starting volume'});
+  const last=fr[n-1],ws=Object.entries(last.wells).sort((a,b)=>a[0][0].localeCompare(b[0][0])||(+a[0].slice(1))-(+b[0].slice(1)));
+  barChart('c2',{title:'Liquid in each well',bars:ws.map(([w,o])=>({label:w,v:o.v,color:o.v>cfg.cap?'var(--fail)':`rgb(${o.c.map(x=>Math.round(x/o.v)).join(',')})`})),ymax:Math.max(cfg.cap*1.15,...ws.map(x=>x[1].v*1.05)),hline:{y:cfg.cap,label:'well limit'},ylab:'µL'});
+  const vmax=Math.max(cfg.pmax*1.1,...fr.map(f=>f.v*1.1));
+  lineChart('c3',{title:'Transfer sizes',series:[{color:'var(--ink)',line:false,dots:true,pts:fr.map((f,j)=>[j+1,f.v,(f.v<cfg.pmin||f.v>cfg.pmax)?'var(--fail)':'var(--ink)'])}],xmin:0,xmax:n+1,ymin:0,ymax:vmax,band:[cfg.pmin,cfg.pmax],yfmt:v=>Math.round(v),xfmt:v=>Math.round(v),xticks:n<=12?[...Array(n).keys()].map(x=>x+1):null,xlab:'step',ylab:'µL'})}
 function renderB(){const n=+$('#ansel').value||300,seed=+$('#aseed').value||7,rnd=prng(seed),bases=[];for(let i=0;i<n;i++)bases.push(genProto(rnd));
  const m=ROWS.split('').map(()=>Array(12).fill(0)),bins=Array(6).fill(0);
  for(const b of bases)for(const [,,w,v] of b){m[ROWS.indexOf(w[0])][+w.slice(1)-1]+=v/n;bins[Math.min(5,Math.floor((v-20)/20))]++}
@@ -875,26 +928,26 @@ function renderFlow(fr){const W=560,H=270,LX=84,RX=W-84,nw=10,rs=Object.keys(S0)
  y=10;for(const w of wo){wt[w]=rs.reduce((a,r)=>a+(link[r+'|'+w]||0),0);wy[w]=y;y+=wt[w]*sc+gap}
  const lo={...ry},ro={...wy},xm=(LX+nw+RX)/2;let h='';
  for(const r of rs)for(const w of wo){const v=link[r+'|'+w];if(!v)continue;const hh=v*sc,y0=lo[r],y1=ro[w];lo[r]+=hh;ro[w]+=hh;
-  h+=`<path d="M${LX+nw},${y0.toFixed(1)} C${xm},${y0.toFixed(1)} ${xm},${y1.toFixed(1)} ${RX},${y1.toFixed(1)} L${RX},${(y1+hh).toFixed(1)} C${xm},${(y1+hh).toFixed(1)} ${xm},${(y0+hh).toFixed(1)} ${LX+nw},${(y0+hh).toFixed(1)} Z" style="fill:${colsR[r]}" opacity=".55"><title>${r} → ${w}: ${v} µL</title></path>`}
- for(const r of rs)if(rt[r])h+=`<rect x="${LX}" y="${ry[r].toFixed(1)}" width="${nw}" height="${(rt[r]*sc).toFixed(1)}" style="fill:${colsR[r]}"/><text class="c-t" x="${LX-6}" y="${(ry[r]+rt[r]*sc/2+3).toFixed(1)}" text-anchor="end">${r} ${rt[r]}</text>`;
+   h+=`<path d="M${LX+nw},${y0.toFixed(1)} C${xm},${y0.toFixed(1)} ${xm},${y1.toFixed(1)} ${RX},${y1.toFixed(1)} L${RX},${(y1+hh).toFixed(1)} C${xm},${(y1+hh).toFixed(1)} ${xm},${(y0+hh).toFixed(1)} ${LX+nw},${(y0+hh).toFixed(1)} Z" style="fill:${colsR[r]||'var(--ink)'}" opacity=".55"><title>${r} → ${w}: ${v} µL</title></path>`}
+  for(const r of rs)if(rt[r])h+=`<rect x="${LX}" y="${ry[r].toFixed(1)}" width="${nw}" height="${(rt[r]*sc).toFixed(1)}" style="fill:${colsR[r]||'var(--ink)'}"/><text class="c-t" x="${LX-6}" y="${(ry[r]+rt[r]*sc/2+3).toFixed(1)}" text-anchor="end">${r} ${rt[r]}</text>`;
  for(const w of wo)h+=`<rect x="${RX}" y="${wy[w].toFixed(1)}" width="${nw}" height="${(wt[w]*sc).toFixed(1)}" style="fill:var(--ink)"/><text class="c-t" x="${RX+nw+5}" y="${(wy[w]+wt[w]*sc/2+3).toFixed(1)}">${w} ${wt[w]}</text>`;
  svgOut('c9',W,H,h,'Flow from reagents to wells')}
-function renderFilm(fr){const n=fr.length,cols=4,tw=126,cell=tw/12,th=22+8*cell,rowsN=Math.ceil(n/cols),H=rowsN*(th+10)+4;let h='';
+function renderFilm(fr,cap){const n=fr.length,cols=4,tw=126,cell=tw/12,th=22+8*cell,rowsN=Math.ceil(n/cols),H=rowsN*(th+10)+4;let h='';cap=cap||DEF.cap;
  fr.forEach((f,j)=>{const ox=(j%cols)*(tw+14)+6,oy=Math.floor(j/cols)*(th+10)+2,bad=f.errs.length>0;
   h+=`<text class="c-t" x="${ox}" y="${oy+10}" style="fill:${bad?'var(--fail)':'var(--mute)'}">${f.i}: ${f.r} → ${esc(f.w)} ${f.v}</text>`;
   for(let r=0;r<8;r++)for(let c=0;c<12;c++){const o=f.wells[ROWS[r]+(c+1)],cx=(ox+c*cell+cell/2).toFixed(1),cy=(oy+22+r*cell+cell/2).toFixed(1);
-   h+=o?`<circle cx="${cx}" cy="${cy}" r="${(cell*.42*Math.sqrt(Math.min(1,o.v/DEF.cap))+1).toFixed(1)}" style="fill:${o.v>DEF.cap?'var(--fail)':rgbOf(o)}"/>`:`<circle cx="${cx}" cy="${cy}" r="1.4" style="fill:var(--rule)"/>`}
+    h+=o?`<circle cx="${cx}" cy="${cy}" r="${(cell*.42*Math.sqrt(Math.min(1,o.v/cap))+1).toFixed(1)}" style="fill:${o.v>cap?'var(--fail)':rgbOf(o)}"/>`:`<circle cx="${cx}" cy="${cy}" r="1.4" style="fill:var(--rule)"/>`}
   if(f.valid){const m=wxy(f.w);h+=`<circle cx="${(ox+m.ci*cell+cell/2).toFixed(1)}" cy="${(oy+22+m.ri*cell+cell/2).toFixed(1)}" r="${(cell*.5).toFixed(1)}" fill="none" style="stroke:${bad?'var(--fail)':'var(--ink)'}" stroke-width="1.2"/>`}
   else h+=`<text class="c-t" x="${ox+tw}" y="${oy+10}" text-anchor="end" style="fill:var(--fail)">✕</text>`});
  svgOut('c10',560,H,h,'Plate after each step')}
-function renderCum(fr){const n=fr.length,rs=Object.keys(S0),cum=[{buffer:0,sample:0,dye:0}];
- for(const f of fr){const c={...cum[cum.length-1]};c[f.r]=(c[f.r]||0)+f.v;cum.push(c)}
- const areas=[];let lower=cum.map(()=>0);
- for(const r of rs){const upper=cum.map((c,j)=>lower[j]+(c[r]||0));areas.push({name:r,color:colsR[r],top:upper.map((v,j)=>[j,v]),bottom:lower.map((v,j)=>[j,v])});lower=upper}
+function renderCum(fr){const n=fr.length,rs=[...new Set(fr.map(f=>f.r))],cum0={};rs.forEach(k=>cum0[k]=0);const cum=[{...cum0}];
+  for(const f of fr){const c={...cum[cum.length-1]};c[f.r]=(c[f.r]||0)+f.v;cum.push(c)}
+  const areas=[];let lower=cum.map(()=>0);
+  for(const r of rs){const upper=cum.map((c,j)=>lower[j]+(c[r]||0));areas.push({name:r,color:colsR[r]||'var(--ink)',top:upper.map((v,j)=>[j,v]),bottom:lower.map((v,j)=>[j,v])});lower=upper}
  lineChart('c11',{title:'Liquid moved so far',series:[],areas,xmin:0,xmax:Math.max(n,1),ymin:0,ymax:Math.max(1,lower[n]*1.05),yfmt:v=>Math.round(v),xfmt:v=>Math.round(v),xticks:n<=12?[...Array(n+1).keys()]:null,xlab:'after step',ylab:'µL moved'})}
 function renderProb(r){const bars=r.frames.map(f=>({label:String(f.i),v:f.errs.length,color:f.errs.length?'var(--fail)':'var(--rule)'}));
  bars.push({label:'end',v:r.miss.length,color:r.miss.length?'var(--fail)':'var(--rule)'});barChart('c12',{title:'Problems per step',bars,ymax:4,ylab:'problems'})}
-function renderA2(){const i=+$('#asel').value,st=i?LIB[i-1][2]:FIXED,r=sim(st,DEF);renderFlow(r.frames);renderFilm(r.frames);renderCum(r.frames);renderProb(r)}
+function renderA2(){const ap=aProto(+$('#asel').value),st=ap.steps,cfg=ap.cfg,r=sim(st,cfg);renderFlow(r.frames);renderFilm(r.frames,cfg.cap);renderCum(r.frames);renderProb(r)}
 function renderC(){const n=+$('#ansel').value||300,seed=+$('#aseed').value||7,bases=bset(n,seed),rnd=prng(seed+7);
  const rowT=Array(8).fill(0),colT=Array(12).fill(0),sizes={},pts=[],use={buffer:[],sample:[],dye:[]};
  for(const b of bases){const u={buffer:0,sample:0,dye:0};let tot=0;for(const [,r,w,v] of b){rowT[ROWS.indexOf(w[0])]+=v/n;colT[+w.slice(1)-1]+=v/n;u[r]+=v;tot+=v}
@@ -988,13 +1041,13 @@ function renderSchema(){
   h+=`<text class="c-t" x="${W/2}" y="${H-6}" text-anchor="middle" style="font-size:11px;color:var(--mute)">* required field</text>`;
   svgOut('c27',W,H,h,'Protocol schema');
 }
-function renderWaterfall(){const i=+$('#asel').value,st=i?LIB[i-1][2]:FIXED,r=sim(st,DEF),fr=r.frames,n=fr.length,rs=Object.keys(S0);
-  const W=560,H=250,L=50,R=30,T=20,B=40,cum={buffer:0,sample:0,dye:0},steps=[{buffer:0,sample:0,dye:0}];
-  for(const f of fr){const c={...cum};c[f.r]=(c[f.r]||0)+f.v;cum=c;steps.push({...c})}
-  const ymax=Math.max(...Object.values(cum))*1.1,Y=v=>H-B-v/ymax*(H-T-B),X=s=>L+s/n*(W-L-R);
+function renderWaterfall(){const ap=aProto(+$('#asel').value),st=ap.steps,cfg=ap.cfg,r=sim(st,cfg),fr=r.frames,n=fr.length,rs=Object.keys(cfg.stock);
+  const W=560,H=250,L=50,R=30,T=20,B=40,cum={};rs.forEach(k=>cum[k]=0);const steps=[{...cum}];
+  for(const f of fr){cum[f.r]=(cum[f.r]||0)+f.v;steps.push({...cum})}
+  const ymax=Math.max(1,...Object.values(cum))*1.1,Y=v=>H-B-v/ymax*(H-T-B),X=s=>L+s/n*(W-L-R);
   let h='';
-  for(let t=0;t<=4;t++){const v=ymax*t/4;h+=`<line class="c-grid" x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="c-t" x="${L-6}" y="${Y(v)+3}" text-anchor="end">${Math.round(v)}</text>}`}
-  rs.forEach((r,i)=>{const pts=steps.map((s,j)=>[X(j),Y(s[r]||0)]),color=colsR[r];
+  for(let t=0;t<=4;t++){const v=ymax*t/4;h+=`<line class="c-grid" x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="c-t" x="${L-6}" y="${Y(v)+3}" text-anchor="end">${Math.round(v)}</text>`}
+  rs.forEach((r,i)=>{const pts=steps.map((s,j)=>[X(j),Y(s[r]||0)]),color=colsR[r]||'var(--ink)';
     h+=`<polyline fill="none" stroke="${color}" stroke-width="2" points="${pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ')}"/>`;
     h+=`<rect x="${L-40+i*80}" y="${T}" width="60" height="${Y(0)-Y(steps[n][r]||0)}" style="fill:${color}" opacity=".2"/>`;
     h+=`<text class="c-t" x="${L-10+i*80}" y="${T-6}" text-anchor="end" style="fill:${color};font-weight:600">${r}: ${Math.round(steps[n][r]||0)} µL</text>`;
@@ -1003,25 +1056,25 @@ function renderWaterfall(){const i=+$('#asel').value,st=i?LIB[i-1][2]:FIXED,r=si
   h+=`<text class="c-l" x="${(L+W-R)/2}" y="${H-4}" text-anchor="middle">step</text><text class="c-l" transform="translate(12 ${(T+H-B)/2}) rotate(-90)" text-anchor="middle">µL drawn</text>`;
   svgOut('c28',W,H,h,'Reagent waterfall');
 }
-function renderUtilization(){const i=+$('#asel').value,st=i?LIB[i-1][2]:FIXED,r=sim(st,DEF),last=r.frames[r.frames.length-1];
+function renderUtilization(){const ap=aProto(+$('#asel').value),st=ap.steps,cfg=ap.cfg,r=sim(st,cfg),last=r.frames[r.frames.length-1];
   const W=560,H=300,L=24,T=30,cw=(W-L-4)/12,ch=(H-T-4)/8;
   let h='';
   for(let c=0;c<12;c++)h+=`<text class="c-t" x="${(L+c*cw+cw/2).toFixed(1)}" y="${T-7}" text-anchor="middle">${c+1}</text>`;
   for(let r=0;r<8;r++){h+=`<text class="c-t" x="${L-7}" y="${(T+r*ch+ch/2+3).toFixed(1)}" text-anchor="end">${ROWS[r]}</text>`;
-    for(let c=0;c<12;c++){const w=ROWS[r]+(c+1),o=last.wells[w],pct=o?o.v/DEF.cap*100:0,over=o&&o.v>DEF.cap,q=Math.min(1,pct/100);
+   for(let c=0;c<12;c++){const w=ROWS[r]+(c+1),o=last.wells[w],pct=o?o.v/cfg.cap*100:0,over=o&&o.v>cfg.cap,q=Math.min(1,pct/100);
       const fill=over?'var(--fail)':`color-mix(in srgb,var(--ink) ${(q*85).toFixed(0)}%,transparent)`;
       h+=`<rect x="${(L+c*cw+1).toFixed(1)}" y="${(T+r*ch+1).toFixed(1)}" width="${(cw-2).toFixed(1)}" height="${(ch-2).toFixed(1)}" style="fill:${fill}"><title>${w}: ${pct.toFixed(1)}%${over?' (OVER)':''}</title></rect>`;
       h+=`<text class="c-t" x="${(L+c*cw+cw/2).toFixed(1)}" y="${(T+r*ch+ch/2+3).toFixed(1)}" text-anchor="middle" style="fill:${q>.5||over?'var(--paper)':'var(--ink)'};font-size:10px">${over?'!':Math.round(pct)}</text>`;
     }}
   svgOut('c29',W,H,h,'Well utilization');
 }
-function renderTimeline(){const i=+$('#asel').value,st=i?LIB[i-1][2]:FIXED,r=sim(st,DEF),fr=r.frames,n=fr.length;
-  const W=560,H=200,L=50,R=30,T=20,B=40,vmax=Math.max(320,...fr.map(f=>f.v*1.1));
+function renderTimeline(){const ap=aProto(+$('#asel').value),st=ap.steps,cfg=ap.cfg,r=sim(st,cfg),fr=r.frames,n=fr.length;
+  const W=560,H=200,L=50,R=30,T=20,B=40,vmax=Math.max(cfg.pmax*1.1,...fr.map(f=>f.v*1.1));
   const X=s=>L+s/(n+1)*(W-L-R),Y=v=>H-B-v/vmax*(H-T-B);
   let h='';
-  for(const t of [DEF.pmin,DEF.pmax])h+=`<line class="c-grid" x1="${L}" x2="${W-R}" y1="${Y(t)}" y2="${Y(t)}" style="stroke:var(--rule)" stroke-dasharray="2 2"/>`;
-  h+=`<rect x="${L}" y="${Y(DEF.pmax)}" width="${W-L-R}" height="${Y(DEF.pmin)-Y(DEF.pmax)}" style="fill:var(--rule)" opacity=".15"/>`;
-  fr.forEach((f,j)=>{const x=X(j+1),y=Y(f.v),color=colsR[f.r],bad=f.v<DEF.pmin||f.v>DEF.pmax;
+  for(const t of [cfg.pmin,cfg.pmax])h+=`<line class="c-grid" x1="${L}" x2="${W-R}" y1="${Y(t)}" y2="${Y(t)}" style="stroke:var(--rule)" stroke-dasharray="2 2"/>`;
+  h+=`<rect x="${L}" y="${Y(cfg.pmax)}" width="${W-L-R}" height="${Y(cfg.pmin)-Y(cfg.pmax)}" style="fill:var(--rule)" opacity=".15"/>`;
+  fr.forEach((f,j)=>{const x=X(j+1),y=Y(f.v),color=colsR[f.r]||'var(--ink)',bad=f.v<cfg.pmin||f.v>cfg.pmax;
     h+=`<line x1="${x}" x2="${x}" y1="${Y(0)}" y2="${y}" style="stroke:${color}" stroke-width="3"/>`;
     h+=`<circle cx="${x}" cy="${y}" r="${bad?5:3}" style="fill:${bad?'var(--fail)':color}"><title>Step ${f.i}: ${f.r} → ${f.w} ${f.v} µL${bad?' (OUT OF RANGE)':''}</title></circle>`;
   });
@@ -1036,7 +1089,7 @@ function renderCooccurrence(){const n=+$('#ansel').value||300,seed=+$('#aseed').
   const co=SCOPE.map(()=>Array(5).fill(0)),marg=Array(5).fill(0);
   for(let k=3;k<=3;k++){for(const base of b){const ch=shuffle([...order]).slice(0,k).sort((x,y)=>order.indexOf(x)-order.indexOf(y));let st=base,cfg=GCFG;const tk=new Set();
     for(const t of ch){const r=inject(t,st,cfg,rnd,tk);st=r.steps;cfg=r.cfg}
-    const cs=codesOf(st,cfg);SCOPE.forEach((a,i)=>{if(cs.has(a)){marg[i]++;SCOPE.forEach((c,j)=>{if(cs.has(c))co[i][j]++})}})}}
+    const cs=new Set(codesOf(st,cfg));SCOPE.forEach((a,i)=>{if(cs.has(a)){marg[i]++;SCOPE.forEach((c,j)=>{if(cs.has(c))co[i][j]++})}})}}
   const W=560,H=300,L=100,T=30,ch=40;
   let h=`<text class="c-t" x="${L+200}" y="${T-10}" text-anchor="middle" style="font-weight:600;font-size:14px">Error co-occurrence (3 errors injected)</text>`;
   for(let i=0;i<5;i++){h+=`<text class="c-t" x="${L-8}" y="${T+i*ch+ch/2+3}" text-anchor="end" style="font-size:11px">${SCOPE[i].replace('_','\n')}</text>`;
@@ -1058,7 +1111,7 @@ function renderSimilarity(){const n=Math.min(50,+$('#ansel').value||300),seed=+$
   }
   svgOut('c32',W,H,h,'Protocol similarity');
 }
-function renderAnalysis(){const sel=$('#asel');if(!sel.innerHTML)sel.innerHTML=['Example protocol',...LIB.map(l=>l[0])].map((n,i)=>`<option value="${i}">${n}</option>`).join('');
+function renderAnalysis(){const sel=$('#asel');if(!sel.innerHTML)sel.innerHTML=['Example protocol',...LIB.map(l=>l[0]),...REAL.map(r=>'Real: '+r[0])].map((n,i)=>`<option value="${i}">${n}</option>`).join('');
   const pa=()=>{renderA();renderA2();renderWaterfall();renderUtilization();renderTimeline()},gen=()=>{setTimeout(renderB,0);setTimeout(renderC,15);setTimeout(renderD,30);setTimeout(renderE,45);setTimeout(renderPipeline,60);setTimeout(renderRules,75);setTimeout(renderSchema,90);setTimeout(renderCooccurrence,105);setTimeout(renderSimilarity,120)};
   sel.onchange=pa;$('#ago').onclick=gen;$('#atime').onclick=renderT;pa();gen();setTimeout(renderT,60);setTimeout(renderPipeline,120);setTimeout(renderRules,135);setTimeout(renderSchema,150);setTimeout(renderCooccurrence,165);setTimeout(renderSimilarity,180)}
 
@@ -1123,7 +1176,7 @@ function renderAtlas(){
  /* static tables */
  $('#tG').innerHTML=[['Parse','O(S)','O(S)','one pass to read steps'],['Simulate','O(S)','O(W + R)','two counters per well and stock'],['Check (6 rules)','O(S)','O(1)','constant tests per step'],['Report','O(F)','O(F)','F = violations found'],['Total','O(S)','O(W + R + F)','S steps, W filled wells, R reagents']].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td style="color:var(--mute)">${r[3]}</td></tr>`).join('');
  $('#tH').innerHTML=[['Pipette 20–300 µL','Opentrons P300 single-channel range'],['Well limit 200 µL','conservative vs ~360 µL 96-well datasheets'],['Plate 96 (A–H × 1–12)','384 (A–P × 1–24) accepted in Try it; drawings show 96'],['Reagents buffer 4000 / sample 800 / dye 400 µL','benchmark generator only; Try it accepts any'],['Dead volume 0 (off)','opt-in; enable per protocol'],['Controls A1 negative, A12 positive','lab convention for this assay']].map(r=>`<tr><td>${r[0]}</td><td style="color:var(--mute)">${r[1]}</td></tr>`).join('');
- $('#atlasCount').textContent='48 charts · 4 tables · 15 fault variants · '+LIB.length+' protocols · '+$$('#glossary, section[data-p="glossary"] dt').length+' glossary terms.';
+  $('#atlasCount').textContent='48 charts · 4 tables · 15 fault variants · '+(LIB.length+REAL.length)+' protocols · '+$$('#glossary, section[data-p="glossary"] dt').length+' glossary terms.';
  /* heavy: B stability, D patterns, E taxonomy, H figures — staggered */
  setTimeout(()=>{
   atlasSafe('c39',()=>{const seeds=[7,8,9,10,11],per=seeds.map(s=>bench2(100,s));dotPlot('c39',SCOPE.map(t=>{const vs=per.map(b=>100*b.single.find(r=>r.t===t).hit/100);return{label:t,v:vs.reduce((a,x)=>a+x,0)/5,lo:Math.min(...vs),hi:Math.max(...vs),color:'var(--ink)'}}))});
@@ -1175,7 +1228,7 @@ function go(id){
  $$('section[data-p]').forEach(s=>s.classList.toggle('on',s.dataset.p===id));
  $$('#nav button').forEach(b=>b.dataset.go===id?b.setAttribute('aria-current','page'):b.removeAttribute('aria-current'));
  if(id==='results')runBench();if(id==='build')drawBuilder();if(id==='validate'&&$('#vout').textContent.startsWith('Results appear'))vrun();
-  if(id==='data')renderLib();if(id==='analysis')renderAnalysis();if(id==='atlas')renderAtlas();
+  if(id==='data'){renderLib();renderReal();renderRetro()}if(id==='analysis')renderAnalysis();if(id==='atlas')renderAtlas();
   try{if(history.replaceState)history.replaceState(null,'','#/'+id)}catch(e){}
   window.scrollTo(0,0)}
 $$('[data-go]').forEach(e=>e.addEventListener('click',ev=>{ev.preventDefault();go(e.dataset.go)}));

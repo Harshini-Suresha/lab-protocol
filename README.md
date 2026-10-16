@@ -39,7 +39,7 @@ Each failure is reported with step number, rule code, and a one-line reason.
 - **Notes (home):** overview + animated 96-well plate simulator. Press Play, or inject one random mistake to see what gets reported.
 - **Build:** click wells to compose a protocol; the checker runs after every click. Send to Try it to export JSON.
 - **Try it:** paste protocol JSON and validate locally in the browser. Nothing leaves the browser.
-- **Data:** 9+ hand-written sample protocols (validated live on page load), Opentrons OT-2 pipette ranges, 96/384 plate reference.
+- **Data:** 9+ hand-written sample protocols + 4 transcribed real OT-2 protocols from the Opentrons Protocol Library (serial dilution subset + full run, restriction digest, PCR distribution — each checked live with its real pipette range and well limit) + 2 shipped library faults with before/after history, Opentrons OT-2 pipette ranges, plate maxima from labware definitions and Corning datasheets (NEST 200, Corning 360/112/16.8 mL).
 - **Analysis:** charts drawn in-browser by the same checker — reagent levels, plate state, transfer sizes, limit sensitivity, timing.
 - **Atlas:** full figure gallery (volumes, stability across seeds, boundary tests, error taxonomy, reagents, wells, methods).
 - **Method:** simulation algorithm (O(S) time), rule trigger conditions, evaluation design, Wilson 95% CIs, threats to validity.
@@ -65,7 +65,7 @@ Based on the Laboratory Automation Protocol format from [ACS Synth. Biol. 2023](
 
 ## Limitations
 
-Knows nothing about viscosity, evaporation, deck collisions, timing, or biology. A pass means the protocol agrees with itself w.r.t. the six rules — the assay can still fail. Benchmark numbers are from generated protocols + synthesised faults, not real lab data.
+Knows nothing about viscosity, evaporation, deck collisions, timing, or biology. A pass means the protocol agrees with itself w.r.t. the six rules — the assay can still fail. Evaluated on real OT-2 protocols (Opentrons Protocol Library — see Data page for sources and transcription notes): 0 false alarms on 4 transcribed valid protocols; retrospective on shipped library faults caught the 649b67 example-input overdraw (`REAGENT_EMPTY`) and missed the 052d03 reservoir-planning fault (no reservoir-capacity rule yet — kept as a visible miss). Synthetic error injection (300 cases per type) is retained as regression tests for code correctness, not field performance. Well-to-well transfers are out of scope in v1.
 
 ## Run it
 
