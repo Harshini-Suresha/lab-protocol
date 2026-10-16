@@ -167,7 +167,7 @@ check_controls(wells, controls)</pre>
 <tr><td><code class="k">WELL_OVERFLOW</code></td><td><code>wells[to] > capacity</code></td><td><code>{to} would hold {wells[to]} µL, max {cap} µL</code></td></tr>
 <tr><td><code class="k">WELL_MISSING</code></td><td><code>to ∉ plate grid</code></td><td><code>{to} does not exist on this plate</code></td></tr>
 <tr><td><code class="k">CONTROL_MISSING</code></td><td>Control well never filled</td><td><code>{type} control {well} never dispensed into</code></td></tr>
-<tr><td><code class="k">DEAD_VOLUME</code></td><td><code>0 < stock[r] < dead_volume</code></td><td><code>{r} left with {stock} µL, below {dead} µL dead volume</code></td></tr>
+<tr><td><code class="k">DEAD_VOLUME</code></td><td><code>0 ≤ stock[r] < dead_volume</code> (and <code>stock[r] ≥ 0</code>, i.e. not already empty)</td><td><code>{r} left with {stock} µL, below {dead} µL dead volume</code></td></tr>
 </tbody></table></div>
 
 <h2>An example step</h2>
@@ -198,7 +198,7 @@ steps:
 <h2>One error at a time</h2>
 <p>Each protocol gets one mistake. "Caught" means the checker reported that rule's code. For the two rows with no rule, it means the checker reported anything.</p>
 <div class="tw"><table><thead><tr><th>Injected error</th><th>Target</th><th class="num">n</th><th class="num">Caught</th><th class="num">Rate</th><th class="num">95% interval</th><th></th></tr></thead><tbody id="tA"></tbody></table></div>
-<p class="mono" style="color:var(--mute)">Interval: Wilson score. Swapped reagent and moved dispense have no rule, so any catch there is by accident: the change happened to cause an overflow, an empty source or a missing control.</p>
+<p class="mono" style="color:var(--mute)">Interval: Wilson score (95%). Same seed and protocol count reproduce the same table: base protocols come from one stream and each error type gets its own independent stream. Swapped reagent and moved dispense have no rule, so any catch there is by accident: the change happened to cause an overflow, an empty source or a missing control.</p>
 <h2>Several errors at once</h2>
 <p>Two or three different mistakes in one protocol. It only counts if every injected code is reported.</p>
 <div class="tw"><table><thead><tr><th>Injected together</th><th class="num">n</th><th class="num">All found</th><th class="num">Rate</th><th class="num">95% interval</th></tr></thead><tbody id="tB"></tbody></table></div>
@@ -276,7 +276,7 @@ steps:
 <tr><td><code class="k">WELL_OVERFLOW</code></td><td><code>wells[to] > well_capacity</code></td><td><code>{to} would hold {wells[to]} µL, max {cap} µL</code></td></tr>
 <tr><td><code class="k">WELL_MISSING</code></td><td><code>to ∉ plate grid</code></td><td><code>{to} does not exist on this plate</code></td></tr>
 <tr><td><code class="k">CONTROL_MISSING</code></td><td>Control well never received liquid</td><td><code>{type} control {well} is never dispensed into</code></td></tr>
-<tr><td><code class="k">DEAD_VOLUME</code></td><td><code>0 < stock[from] < dead_volume</code> (opt-in)</td><td><code>{from} is left with {stock} µL, below its {dead} µL dead volume</code></td></tr>
+<tr><td><code class="k">DEAD_VOLUME</code></td><td><code>0 ≤ stock[from] < dead_volume</code> (opt-in; empty stock reports <code>REAGENT_EMPTY</code> instead)</td><td><code>{from} is left with {stock} µL, below its {dead} µL dead volume</code></td></tr>
 </tbody></table></div>
 
 <h3>Error injection for evaluation</h3>
@@ -513,8 +513,8 @@ function draw(){
  if(f){const w=wxy(f.w);head.style.transform=`translate(${X(w.ci)}px,${Y(w.ri)-12}px)`;$('#hp').style.fill=COLHEX[f.r]||'#fff'}else head.style.transform='translate(-90px,-90px)';
  if(going)setTimeout(()=>{if(tok!==drawTok)return;paintWells('s',f.wells);const w=wxy(f.w);splash('#plate',X(w.ci),Y(Math.min(w.ri,8)),COLHEX[f.r]||'#fff',f.errs.length>0)},520);else paintWells('s',f?f.wells:{});
  const hi=$('#hi'),gh=$('#ghost'),mc=$('#mc');gh.setAttribute('opacity',0);hi.setAttribute('cx',-50);mc.setAttribute('opacity',0);
- if(f){const m=/^([A-Z])(\d+)$/.exec(f.w),ci=Math.min(Math.max(+m[2]-1,0),12),ri=ROWS.includes(m[1])?ROWS.indexOf(m[1]):8;
-  if(f.valid){hi.setAttribute('cx',X(ci));hi.setAttribute('cy',Y(ri))}
+  if(f){const q=wxy(f.w),ci=Math.min(q.ci,12),ri=Math.min(q.ri,8);
+   if(f.valid){hi.setAttribute('cx',X(ci));hi.setAttribute('cy',Y(ri))}
   else{gh.setAttribute('transform',`translate(${X(ci)},${Y(Math.min(ri,8))-4})`);gh.setAttribute('opacity',1);$('#gt').textContent=f.w+' not on plate'}}
  const st=f?f.stock:S0;
  setGauges('s',st);
@@ -546,12 +546,21 @@ $('#vin').value=fmt(EX_FIXED);
 $('#vfault').onclick=()=>{const t=TYPES[Math.floor(Math.random()*TYPES.length)],o={...EX_FIXED,steps:mutate(t,FIXED,Math.random).map(s=>({from:s[1],to:s[2],ul:s[3]}))};$('#vin').value=fmt(o);vrun()};$('#vfixed').onclick=()=>{$('#vin').value=fmt(EX_FIXED);vrun()};
 function vrun(){
  const out=$('#vout'),bad=m=>out.innerHTML=`<p class="bad"><b>Could not read the protocol.</b> ${esc(m)}</p>`;
- let j;try{j=JSON.parse($('#vin').value)}catch(e){return bad(e.message)}
- if(!j||typeof j.reagents!=='object'||!j.reagents)return bad('"reagents" must be an object such as {"buffer": 1000}.');
- if(!Array.isArray(j.steps)||!j.steps.length)return bad('"steps" must be a non-empty list.');
- const plate=+(j.plate||96);if(![96,384].includes(plate))return bad('"plate" must be 96 or 384.');
- const steps=[];for(const [n,s] of j.steps.entries()){if(!s||typeof s.from!=='string'||typeof s.to!=='string'||typeof s.ul!=='number'||!isFinite(s.ul))return bad(`Step ${n+1} needs "from" (text), "to" (text) and "ul" (number).`);steps.push([n+1,s.from,s.to.toUpperCase(),s.ul])}
- const cfg={stock:j.reagents,pmin:j.pipette?.min??20,pmax:j.pipette?.max??300,cap:j.well_capacity??200,dead:+(j.dead_volume||0),rows:plate===96?'ABCDEFGH':'ABCDEFGHIJKLMNOP',cols:plate===96?12:24,ctrl:j.controls||{}};
+  let j;try{j=JSON.parse($('#vin').value)}catch(e){return bad(e.message)}
+  if(!j||typeof j!=='object'||Array.isArray(j))return bad('The protocol must be a JSON object.');
+  if(!j.reagents||typeof j.reagents!=='object'||Array.isArray(j.reagents)||!Object.keys(j.reagents).length)return bad('"reagents" must be an object such as {"buffer": 1000}.');
+  for(const [k,v] of Object.entries(j.reagents)){if(typeof v!=='number'||!isFinite(v)||v<0)return bad(`Reagent "${k}" must be a starting volume in µL (a number ≥ 0).`)}
+  if(!Array.isArray(j.steps)||!j.steps.length)return bad('"steps" must be a non-empty list.');
+  if(j.steps.length>10000)return bad('"steps" has more than 10,000 entries; split the protocol before checking.');
+  const plate=+(j.plate||96);if(![96,384].includes(plate))return bad('"plate" must be 96 or 384.');
+  const pmin=j.pipette?.min??20,pmax=j.pipette?.max??300;
+  if(typeof pmin!=='number'||typeof pmax!=='number'||!isFinite(pmin)||!isFinite(pmax)||pmin<0||pmax<=0||pmin>pmax)return bad('"pipette" needs {"min","max"} with 0 ≤ min ≤ max.');
+  const cap=j.well_capacity??200,dead=+(j.dead_volume||0);
+  if(typeof cap!=='number'||!isFinite(cap)||cap<=0)return bad('"well_capacity" must be a number > 0.');
+  if(!isFinite(dead)||dead<0)return bad('"dead_volume" must be a number ≥ 0.');
+  if(j.controls!=null&&(typeof j.controls!=='object'||Array.isArray(j.controls)))return bad('"controls" must be an object such as {"A1": "negative"}.');
+  const steps=[];for(const [n,s] of j.steps.entries()){if(!s||typeof s.from!=='string'||typeof s.to!=='string'||typeof s.ul!=='number'||!isFinite(s.ul))return bad(`Step ${n+1} needs "from" (text), "to" (text) and "ul" (number).`);if(!s.from.trim()||!s.to.trim())return bad(`Step ${n+1} has an empty "from" or "to".`);if(!(s.ul>0))return bad(`Step ${n+1}: "ul" must be a number > 0 µL (got ${s.ul}).`);if(s.ul>100000)return bad(`Step ${n+1}: "ul" looks unphysical (${s.ul} µL). Check units.`);steps.push([n+1,s.from,s.to.toUpperCase(),s.ul])}
+  const cfg={stock:j.reagents,pmin,pmax,cap,dead,rows:plate===96?'ABCDEFGH':'ABCDEFGHIJKLMNOP',cols:plate===96?12:24,ctrl:j.controls||{}};
  const r=sim(steps,cfg),n=r.frames.reduce((a,x)=>a+x.errs.length,0)+r.miss.length;
  let h=`<p class="verdict ${n?'bad':'ok'}" style="margin:0 0 8px">${n?`FAILED: ${n} violation${n>1?'s':''}. Do not run this protocol.`:'PASSED: safe to execute.'}</p><div class="tw"><table><thead><tr><th>Step</th><th>Transfer</th><th>Result</th></tr></thead><tbody>`;
  for(const f of r.frames)h+=`<tr><td>${f.i}</td><td>${esc(f.r)} → ${esc(f.w)}, ${f.v} µL</td><td>${f.errs.length?f.errs.map(e=>`<span class="bad">${e[0]}</span><br>${esc(e[1])}`).join('<br>'):'<span class="ok">pass</span>'}</td></tr>`;
@@ -619,15 +628,16 @@ function inject(type,steps,cfg,rnd,taken){
  else if(type==='WRONG_WELL'){const x=one();x[2]=pick(ALLW.filter(w=>w!==x[2]))}
  return{steps:s,cfg:c2}}
 const SCOPE=['PIPETTE_RANGE','REAGENT_EMPTY','WELL_OVERFLOW','WELL_MISSING','CONTROL_MISSING'],OUT=['WRONG_REAGENT','WRONG_WELL'];
-function wilson(c,n){const z=1.96,p=c/n,d=1+z*z/n,m=p+z*z/(2*n),a=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n));return[Math.max(0,(m-a)/d),Math.min(1,(m+a)/d)]}
+function wilson(c,n){if(!(n>0))return[0,1];c=Math.min(Math.max(c,0),n);const z=1.96,p=c/n,d=1+z*z/n,m=p+z*z/(2*n),a=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n));return[Math.max(0,(m-a)/d),Math.min(1,(m+a)/d)]}
 function bench2(n,seed){
- const rnd=prng(seed),bases=[];for(let i=0;i<n;i++)bases.push(genProto(rnd));
- const single=[...SCOPE,...OUT].map(t=>{let hit=0;const conf={};
-  for(const b of bases){const r=inject(t,b,GCFG,rnd,new Set()),cs=new Set(codesOf(r.steps,r.cfg));cs.forEach(c=>conf[c]=(conf[c]||0)+1);if(!cs.size)conf.none=(conf.none||0)+1;if(SCOPE.includes(t)?cs.has(t):cs.size)hit++}
-  return{t,n,hit,conf,scope:SCOPE.includes(t)}});
- const order=['CONTROL_MISSING','PIPETTE_RANGE','WELL_OVERFLOW','WELL_MISSING','REAGENT_EMPTY'];
- const combos=[2,3].map(k=>{let hit=0;for(const b of bases){const ch=[...order].sort(()=>rnd()-.5).slice(0,k).sort((x,y)=>order.indexOf(x)-order.indexOf(y));let st=b,cfg=GCFG;const tk=new Set();
-  for(const t of ch){const r=inject(t,st,cfg,rnd,tk);st=r.steps;cfg=r.cfg}const cs=new Set(codesOf(st,cfg));if(ch.every(t=>cs.has(t)))hit++}return{k,n,hit}});
+  const bases=[];{const rg=prng(seed);for(let i=0;i<n;i++)bases.push(genProto(rg))}
+  const shuffle=(a,r)=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+  const single=[...SCOPE,...OUT].map((t,ti)=>{let hit=0;const conf={},r=prng(seed*100003+ti*7919+11);
+   for(const b of bases){const rj=inject(t,b,GCFG,r,new Set()),cs=new Set(codesOf(rj.steps,rj.cfg));cs.forEach(c=>conf[c]=(conf[c]||0)+1);if(!cs.size)conf.none=(conf.none||0)+1;if(SCOPE.includes(t)?cs.has(t):cs.size)hit++}
+   return{t,n,hit,conf,scope:SCOPE.includes(t)}});
+  const order=['CONTROL_MISSING','PIPETTE_RANGE','WELL_OVERFLOW','WELL_MISSING','REAGENT_EMPTY'];
+  const combos=[2,3].map((k,ki)=>{let hit=0;const r=prng(seed*100003+999*ki+5);for(const b of bases){const ch=shuffle([...order],r).slice(0,k).sort((x,y)=>order.indexOf(x)-order.indexOf(y));let st=b,cfg=GCFG;const tk=new Set();
+   for(const t of ch){const rj=inject(t,st,cfg,r,tk);st=rj.steps;cfg=rj.cfg}const cs=new Set(codesOf(st,cfg));if(ch.every(t=>cs.has(t)))hit++}return{k,n,hit}});
  let fp=0,tot=0;const sizes={};for(const b of bases){if(codesOf(b,GCFG).length)fp++;sizes[b.length]=(sizes[b.length]||0)+1;tot+=b.reduce((a,x)=>a+x[3],0)}
  return{single,combos,fp,n,sizes,meanSteps:bases.reduce((a,b)=>a+b.length,0)/n,meanUl:tot/n}}
 function runBench(){const n=+$('#nsel').value||300,b=bench2(n,+$('#seed').value||7),pc=(c,m)=>(100*c/m).toFixed(1)+'%',ci=(c,m)=>{const[l,h]=wilson(c,m);return`${(l*100).toFixed(1)}–${(h*100).toFixed(1)}%`};
@@ -641,7 +651,7 @@ function runBench(){const n=+$('#nsel').value||300,b=bench2(n,+$('#seed').value|
 $('#go').onclick=runBench;
 
 /* motion */
-const wxy=w=>{const m=/^([A-Z])(\d+)$/.exec(w);return{ci:Math.min(Math.max(+m[2]-1,0),12),ri:ROWS.includes(m[1])?ROWS.indexOf(m[1]):8}};
+const wxy=w=>{const m=/^([A-Z])(\d+)$/.exec(String(w||''));if(!m)return{ci:12,ri:8,oob:true};return{ci:Math.min(Math.max(+m[2]-1,0),12),ri:ROWS.includes(m[1])?ROWS.indexOf(m[1]):8,oob:!ROWS.includes(m[1])}};
 let sid=0;
 function splash(sel,x,y,c,bad){const svg=$(sel);if(!svg||!svg.insertAdjacentHTML)return;const id='sp'+(++sid);
  svg.insertAdjacentHTML('beforeend',`<g id="${id}"><circle class="drop" cx="${x}" cy="${y}" r="4.5" fill="${c}"/><circle class="rip" cx="${x}" cy="${y}" r="9" fill="none" stroke="${bad?'#ff7a63':c}" stroke-width="2"/></g>`);
@@ -765,7 +775,8 @@ function renderC(){const n=+$('#ansel').value||300,seed=+$('#aseed').value||7,ba
 function renderD(){const n=+$('#ansel').value||300,seed=+$('#aseed').value||7,b=bench2(n,seed),bases=bset(n,seed),rnd=prng(seed+101),order=['CONTROL_MISSING','PIPETTE_RANGE','WELL_OVERFLOW','WELL_MISSING','REAGENT_EMPTY'];
  const ci=(c,m)=>wilson(c,m).map(x=>x*100);
  dotPlot('c18',b.single.map(r=>{const [lo,hi]=ci(r.hit,r.n);return{label:r.t,v:100*r.hit/r.n,lo,hi,color:r.scope?'var(--ink)':'var(--fail)'}}));
- const runK=(base,k)=>{const ch=[...order].sort(()=>rnd()-.5).slice(0,k).sort((x,y)=>order.indexOf(x)-order.indexOf(y));let st=base,cfg=GCFG;const tk=new Set();for(const t of ch){const r=inject(t,st,cfg,rnd,tk);st=r.steps;cfg=r.cfg}const cl=codesOf(st,cfg);return{ch,cl,cs:new Set(cl)}};
+  const shuffle=(a)=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+  const runK=(base,k)=>{const ch=shuffle([...order]).slice(0,k).sort((x,y)=>order.indexOf(x)-order.indexOf(y));let st=base,cfg=GCFG;const tk=new Set();for(const t of ch){const r=inject(t,st,cfg,rnd,tk);st=r.steps;cfg=r.cfg}const cl=codesOf(st,cfg);return{ch,cl,cs:new Set(cl)}};
  const kp=[],lo=[],hi=[],vc={},co=SCOPE.map(()=>Array(5).fill(0));
  for(let k=1;k<=5;k++){let hit=0;for(const base of bases){const r=runK(base,k);if(r.ch.every(t=>r.cs.has(t)))hit++;
    if(k===3){vc[r.cl.length]=(vc[r.cl.length]||0)+1;SCOPE.forEach((a,i)=>SCOPE.forEach((c,j)=>{if(r.cs.has(a)&&r.cs.has(c))co[i][j]++}))}}
@@ -791,7 +802,7 @@ function renderPipeline(){
   stages.forEach((s,i)=>{const x=L+i*bw+bw/2;
     h+=`<rect x="${L+i*bw+4}" y="${T+4}" width="${bw-8}" height="${H-T-B-40}" rx="6" style="fill:${s.color}" opacity=".15"/>`;
     h+=`<text class="c-t" x="${x}" y="${T+24}" text-anchor="middle" style="font-weight:600;font-size:15px;fill:${s.color}">${s.name}</text>`;
-    h+=`<text class="c-t" x="${x}" y="${T+50}" text-anchor="middle" style="font-size:11px;line-height:1.3">${s.desc.replace(/\n/g,'<tspan x="'+x+'" dy="1.2em">')}</text>`;
+    h+=`<text class="c-t" x="${x}" y="${T+50}" text-anchor="middle" style="font-size:11px">${s.desc.split('\n').map((ln,j)=>`<tspan x="${x}" dy="${j?'1.2em':'0'}">${ln}</tspan>`).join('')}</text>`;
     if(i<stages.length-1){const ax=L+(i+1)*bw;
       h+=`<path d="M${ax-8},${H/2} L${ax+8},${H/2}" style="stroke:var(--ink);stroke-width:2" marker-end="url(#arrow)"/>`;
       h+=`<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 Z" fill="var(--ink)"/></marker></defs>`;
@@ -806,10 +817,10 @@ function renderRules(){
     {code:'WELL_OVERFLOW',cond:'wells[step.to] > well_capacity',when:'During step',color:'var(--sam)'},
     {code:'WELL_MISSING',cond:'step.to ∉ plate grid',when:'During step',color:'var(--warn)'},
     {code:'CONTROL_MISSING',cond:'∃ control well: wells[w] = 0',when:'After all steps',color:'var(--fail)'},
-    {code:'DEAD_VOLUME',cond:'0 < stock[r] < dead_volume',when:'After all steps (opt-in)',color:'var(--mute)'},
+    {code:'DEAD_VOLUME',cond:'0 ≤ stock[r] < dead_volume (only if not already empty)',when:'During step (opt-in)',color:'var(--mute)'},
   ];
   const W=560,H=280,L=100,T=30,B=30,rh=34;
-  let h='<text class="c-t" x="${W/2}" y="${T-10}" text-anchor="middle" style="font-weight:600;font-size:14px">Rule trigger conditions</text>';
+  let h=`<text class="c-t" x="${W/2}" y="${T-10}" text-anchor="middle" style="font-weight:600;font-size:14px">Rule trigger conditions</text>`;
   h+=`<line class="c-ax" x1="${L}" x2="${W-30}" y1="${T+rh*6+4}" y2="${T+rh*6+4}"/>`;
   h+=`<line class="c-ax" x1="${L}" x2="${L}" y1="${T}" y2="${T+rh*6+4}"/>`;
   h+=`<text class="c-t" x="${L-8}" y="${T-4}" text-anchor="end" style="font-weight:500">Code</text>`;
@@ -835,10 +846,10 @@ function renderSchema(){
     {name:'steps',type:'[{from,to,ul}]',req:true,desc:'Ordered transfers'},
   ];
   const rh=24;
-  let h='<text class="c-t" x="${W/2}" y="${T-8}" text-anchor="middle" style="font-weight:600;font-size:14px">LabCheck protocol schema (JSON)</text>';
+  let h=`<text class="c-t" x="${W/2}" y="${T-8}" text-anchor="middle" style="font-weight:600;font-size:14px">LabCheck protocol schema (JSON)</text>`;
   fields.forEach((f,i)=>{const y=T+i*rh+rh/2;
     h+=`<rect x="${L}" y="${T+i*rh}" width="${W-L-R}" height="${rh-2}" rx="3" style="fill:${f.req?'var(--buf)':'var(--sam)'}" opacity=".1"/>`;
-    h+=`<text class="mono" x="${L+8}" y="${y+3}" style="fill:${f.req?'var(--buf)':'var(--ink)};font-weight:${f.req?'600':'400'}">${f.name}${f.req?' *' : ''}</text>`;
+    h+=`<text class="mono" x="${L+8}" y="${y+3}" style="fill:${f.req?'var(--buf)':'var(--ink)'};font-weight:${f.req?'600':'400'}">${f.name}${f.req?' *' : ''}</text>`;
     h+=`<text class="mono" x="${L+140}" y="${y+3}" style="color:var(--mute);font-size:11px">${f.type}</text>`;
     h+=`<text class="c-t" x="${W-R-8}" y="${y+3}" text-anchor="end" style="font-size:11px;color:var(--mute)">${f.desc}</text>`;
   });
@@ -868,7 +879,7 @@ function renderUtilization(){const i=+$('#asel').value,st=i?LIB[i-1][2]:FIXED,r=
     for(let c=0;c<12;c++){const w=ROWS[r]+(c+1),o=last.wells[w],pct=o?o.v/DEF.cap*100:0,over=o&&o.v>DEF.cap,q=Math.min(1,pct/100);
       const fill=over?'var(--fail)':`color-mix(in srgb,var(--ink) ${(q*85).toFixed(0)}%,transparent)`;
       h+=`<rect x="${(L+c*cw+1).toFixed(1)}" y="${(T+r*ch+1).toFixed(1)}" width="${(cw-2).toFixed(1)}" height="${(ch-2).toFixed(1)}" style="fill:${fill}"><title>${w}: ${pct.toFixed(1)}%${over?' (OVER)':''}</title></rect>`;
-      h+=`<text class="c-t" x="${(L+c*cw+cw/2).toFixed(1)}" y="${(T+r*ch+ch/2+3).toFixed(1)}" text-anchor="middle" style="fill:${q>.5||over?'var(--paper)':'var(--ink)};font-size:10px">${over?'!':Math.round(pct)}</text>`;
+      h+=`<text class="c-t" x="${(L+c*cw+cw/2).toFixed(1)}" y="${(T+r*ch+ch/2+3).toFixed(1)}" text-anchor="middle" style="fill:${q>.5||over?'var(--paper)':'var(--ink)'};font-size:10px">${over?'!':Math.round(pct)}</text>`;
     }}
   svgOut('c29',W,H,h,'Well utilization');
 }
@@ -889,17 +900,18 @@ function renderTimeline(){const i=+$('#asel').value,st=i?LIB[i-1][2]:FIXED,r=sim
   svgOut('c30',W,H,h,'Step volume timeline');
 }
 function renderCooccurrence(){const n=+$('#ansel').value||300,seed=+$('#aseed').value||7,b=bset(n,seed),rnd=prng(seed+101),order=['CONTROL_MISSING','PIPETTE_RANGE','WELL_OVERFLOW','WELL_MISSING','REAGENT_EMPTY'];
+  const shuffle=(a)=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
   const co=SCOPE.map(()=>Array(5).fill(0)),marg=Array(5).fill(0);
-  for(let k=3;k<=3;k++){for(const base of b){const ch=[...order].sort(()=>rnd()-.5).slice(0,k).sort((x,y)=>order.indexOf(x)-order.indexOf(y));let st=base,cfg=GCFG;const tk=new Set();
+  for(let k=3;k<=3;k++){for(const base of b){const ch=shuffle([...order]).slice(0,k).sort((x,y)=>order.indexOf(x)-order.indexOf(y));let st=base,cfg=GCFG;const tk=new Set();
     for(const t of ch){const r=inject(t,st,cfg,rnd,tk);st=r.steps;cfg=r.cfg}
     const cs=codesOf(st,cfg);SCOPE.forEach((a,i)=>{if(cs.has(a)){marg[i]++;SCOPE.forEach((c,j)=>{if(cs.has(c))co[i][j]++})}})}}
   const W=560,H=300,L=100,T=30,ch=40;
-  let h='<text class="c-t" x="${L+200}" y="${T-10}" text-anchor="middle" style="font-weight:600;font-size:14px">Error co-occurrence (3 errors injected)</text>';
+  let h=`<text class="c-t" x="${L+200}" y="${T-10}" text-anchor="middle" style="font-weight:600;font-size:14px">Error co-occurrence (3 errors injected)</text>`;
   for(let i=0;i<5;i++){h+=`<text class="c-t" x="${L-8}" y="${T+i*ch+ch/2+3}" text-anchor="end" style="font-size:11px">${SCOPE[i].replace('_','\n')}</text>`;
     h+=`<text class="c-t" x="${L+50+i*ch}" y="${T-6}" text-anchor="middle" style="font-size:11px">${SCOPE[i].replace('_','\n')}</text>`;}
   for(let i=0;i<5;i++)for(let j=0;j<5;j++){const v=marg[i]?co[i][j]/marg[i]:0,q=Math.min(1,v);
     h+=`<rect x="${L+j*ch}" y="${T+i*ch}" width="${ch}" height="${ch}" style="fill:color-mix(in srgb,var(--ink) ${(q*85).toFixed(0)}%,transparent)"><title>${SCOPE[i]} & ${SCOPE[j]}: ${(v*100).toFixed(1)}%</title></rect>`;
-    h+=`<text class="c-t" x="${L+j*ch+ch/2}" y="${T+i*ch+ch/2+3}" text-anchor="middle" style="fill:${q>.5?'var(--paper)':'var(--ink)};font-size:11px">${i===j?(marg[i]/n*100).toFixed(1)+'%':(v*100).toFixed(1)+'%'}</text>`;
+    h+=`<text class="c-t" x="${L+j*ch+ch/2}" y="${T+i*ch+ch/2+3}" text-anchor="middle" style="fill:${q>.5?'var(--paper)':'var(--ink)'};font-size:11px">${i===j?(marg[i]/n*100).toFixed(1)+'%':(v*100).toFixed(1)+'%'}</text>`;
   }
   svgOut('c31',W,H,h,'Error co-occurrence');
 }
